@@ -240,3 +240,7 @@ When adding new features:
 2. Add appropriate error handling
 3. Update this README with new endpoints or parameters
 4. Test both streaming and non-streaming modes
+
+## License
+
+MIT © Tonk Labs

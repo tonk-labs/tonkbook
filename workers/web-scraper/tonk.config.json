@@ -1,0 +1,9 @@
+{
+  "name": "web-scraper",
+  "plan": {
+    "platform": "worker",
+    "projectName": "web-scraper",
+    "description": "Scrape websites"
+  },
+  "template": "worker"
+}
