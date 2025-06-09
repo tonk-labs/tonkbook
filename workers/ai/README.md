@@ -1,48 +1,242 @@
-# Tonk Worker
+# AI Worker
 
-A Tonk worker service for building local-first applications.
+A Tonk worker that provides a unified API for interacting with Large Language Models (LLMs). Currently supports OpenAI's GPT models with a flexible architecture designed for easy extension to other providers like Llama.
 
-## Getting Started
+## Quick Start
 
-1. Install dependencies:
-   ```bash
-   pnpm install
-   ```
+### 1. Setup Credentials
 
-2. Start the development server:
-   ```bash
-   pnpm dev
-   ```
-
-3. Build for production:
-   ```bash
-   pnpm build
-   ```
-
-4. Register the worker with Tonk:
-   ```bash
-   tonk worker register
-   ```
-
-## Worker Configuration
-
-The worker is configured using the `worker.config.js` file. You can modify this file to change the worker's behavior.
-
-## Environment Variables
-
-Create a `.env` file based on the `.env.example` file to configure the worker.
-
-## Project Structure
-
-```
-my-worker/
-├── src/
-│   ├── index.ts      # Main entry point
-│   ├── cli.ts        # For controlling the worker
-├── worker.config.js  # Worker configuration
-└── package.json      # Project configuration
+```bash
+cd workers/ai
+npx tsx dist/cli.js setup
 ```
 
-## License
+This will prompt you to paste your OpenAI API key. Get one from [OpenAI API Keys](https://platform.openai.com/api-keys).
 
-MIT © Tonk
+### 2. Start the Worker
+
+```bash
+pnpm start
+```
+
+The worker will start on `http://localhost:5555` with API endpoints at `/api/`.
+
+## API Endpoints
+
+### GET /api/providers
+
+Lists available LLM providers and their configuration status.
+
+```bash
+curl http://localhost:5555/api/providers
+```
+
+**Response:**
+```json
+{
+  "providers": [
+    {
+      "name": "openai",
+      "models": ["gpt-4", "gpt-4-turbo", "gpt-3.5-turbo"],
+      "configured": true
+    }
+  ]
+}
+```
+
+### POST /api/chat
+
+Chat completion with message history support.
+
+**Request:**
+```json
+{
+  "messages": [
+    {"role": "system", "content": "You are a helpful assistant."},
+    {"role": "user", "content": "Hello!"}
+  ],
+  "model": "gpt-3.5-turbo",
+  "temperature": 0.7,
+  "max_tokens": 150,
+  "stream": false
+}
+```
+
+**Response (Non-streaming):**
+```json
+{
+  "content": "Hello! How can I help you today?",
+  "usage": {
+    "prompt_tokens": 20,
+    "completion_tokens": 9,
+    "total_tokens": 29
+  },
+  "model": "gpt-3.5-turbo",
+  "provider": "openai"
+}
+```
+
+### POST /api/complete
+
+Simple text completion interface.
+
+**Request:**
+```json
+{
+  "prompt": "The future of AI is",
+  "system": "You are a technology expert.",
+  "model": "gpt-3.5-turbo",
+  "temperature": 0.8,
+  "stream": false
+}
+```
+
+## Streaming Responses
+
+Both `/api/chat` and `/api/complete` support streaming by setting `"stream": true`.
+
+**Example:**
+```bash
+curl -X POST http://localhost:5555/api/complete \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "Write a short poem about coding",
+    "stream": true
+  }'
+```
+
+**Response:**
+- Content-Type: `text/plain`
+- Transfer-Encoding: `chunked`
+- Text streams in real-time as it's generated
+
+## Parameters
+
+| Parameter | Type | Description | Default |
+|-----------|------|-------------|---------|
+| `messages` | Array | Chat messages for `/api/chat` | Required |
+| `prompt` | String | Text prompt for `/api/complete` | Required |
+| `system` | String | System message for `/api/complete` | Optional |
+| `model` | String | Model to use | `gpt-3.5-turbo` |
+| `temperature` | Number | Randomness (0-2) | `0.7` |
+| `max_tokens` | Number | Maximum response length | OpenAI default |
+| `stream` | Boolean | Enable streaming | `false` |
+| `provider` | String | LLM provider to use | `openai` |
+
+## Development
+
+### Setup
+```bash
+cd workers/ai
+pnpm install
+pnpm build
+```
+
+### Development Mode
+```bash
+pnpm dev
+```
+
+### CLI Commands
+```bash
+# Setup credentials
+npx tsx dist/cli.js setup
+
+# Start worker
+npx tsx dist/cli.js start
+
+# Start on custom port
+npx tsx dist/cli.js start --port 3000
+```
+
+## Architecture
+
+### LLM Provider Interface
+
+The worker uses a flexible provider interface that makes adding new LLMs straightforward:
+
+```typescript
+interface LLMProvider {
+  name: string;
+  models: string[];
+  complete(request: LLMRequest): Promise<LLMResponse>;
+  stream(request: LLMRequest): AsyncIterable<string>;
+  isConfigured(): boolean;
+}
+```
+
+### Adding New Providers
+
+To add a new LLM provider (e.g., Llama):
+
+1. Implement the `LLMProvider` interface
+2. Add credential configuration to `BaseCredentialsManager`
+3. Register the provider in the `LLMService`
+
+Example:
+```typescript
+class LlamaProvider implements LLMProvider {
+  name = 'llama';
+  models = ['llama-2-7b', 'llama-2-13b'];
+  
+  async complete(request: LLMRequest): Promise<LLMResponse> {
+    // Implementation
+  }
+  
+  async* stream(request: LLMRequest): AsyncIterable<string> {
+    // Implementation
+  }
+  
+  isConfigured(): boolean {
+    // Check if credentials exist
+  }
+}
+```
+
+### File Structure
+
+```
+src/
+├── index.ts              # Main HTTP server and routes
+├── cli.ts                # Command-line interface
+├── services/
+│   └── llmProvider.ts    # LLM provider interfaces and implementations
+└── utils/
+    └── baseCredentialsManager.ts # Credential management
+```
+
+## Security
+
+- Credentials are stored in `creds/` directory (git-ignored)
+- API keys are validated before storage
+- No credentials are logged or exposed in responses
+- CORS headers configured for cross-origin requests
+
+## Error Handling
+
+The API returns appropriate HTTP status codes:
+
+- `200` - Success
+- `400` - Bad request (missing parameters)
+- `404` - Endpoint not found
+- `500` - Server error (including LLM provider errors)
+
+Error responses include descriptive messages:
+```json
+{
+  "error": "prompt is required"
+}
+```
+
+## Integration with Tonk Ecosystem
+
+This worker integrates with the Tonk's `keepsync` sync engine for data synchronization and can be used by other Tonk components to add AI capabilities to your workspace.
+
+## Contributing
+
+When adding new features:
+
+1. Follow the existing provider interface pattern
+2. Add appropriate error handling
+3. Update this README with new endpoints or parameters
+4. Test both streaming and non-streaming modes
