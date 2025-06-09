@@ -48,6 +48,7 @@
     "@tonk/cli": "^0.2.6",
     "@tonk/keepsync": "^0.4.3",
     "lucide-react": "^0.475.0",
+    "pdfjs-dist": "^5.3.31",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "uuid": "^11.1.0",

@@ -3,7 +3,7 @@ export interface Source {
   title: string;
   path: string;
   metadata: {
-    type: "text";
+    type: "text" | "pdf";
     createdAt: string;
   };
 }

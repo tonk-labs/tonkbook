@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { Source, ChatMessage } from "../types/source";
 import TextSourceModal from "../components/sources/TextSourceModal";
+import PDFSourceModal from "../components/sources/PDFSourceModal";
 import SourceCard from "../components/sources/SourceCard";
 import AddSourceButtons from "../components/sources/AddSourceButtons";
 import ViewSourceModal from "../components/sources/ViewSourceModal";
@@ -38,6 +39,7 @@ const NotesView = () => {
   // Sources panel state
   const [isSourcesPanelOpen, setIsSourcesPanelOpen] = useState(true);
   const [showTextInputModal, setShowTextInputModal] = useState(false);
+  const [showPDFInputModal, setShowPDFInputModal] = useState(false);
   const [showViewSourceModal, setShowViewSourceModal] = useState(false);
   const [selectedSource, setSelectedSource] = useState<Source | null>(null);
 
@@ -150,6 +152,11 @@ const NotesView = () => {
 
   // Handle adding text source from modal
   const handleAddTextSource = (sourceData: Omit<Source, "id">) => {
+    addSource(sourceData);
+  };
+
+  // Handle adding PDF source from modal
+  const handleAddPDFSource = (sourceData: Omit<Source, "id">) => {
     addSource(sourceData);
   };
 
@@ -319,6 +326,7 @@ const NotesView = () => {
             <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
               <AddSourceButtons
                 onAddText={() => setShowTextInputModal(true)}
+                onAddPdf={() => setShowPDFInputModal(true)}
               />
               {sources.map((source) => (
                 <SourceCard
@@ -420,6 +428,12 @@ const NotesView = () => {
         isOpen={showTextInputModal}
         onClose={() => setShowTextInputModal(false)}
         onAddSource={handleAddTextSource}
+      />
+
+      <PDFSourceModal
+        isOpen={showPDFInputModal}
+        onClose={() => setShowPDFInputModal(false)}
+        onAddSource={handleAddPDFSource}
       />
 
       <ViewSourceModal

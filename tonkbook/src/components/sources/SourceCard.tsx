@@ -15,10 +15,17 @@ interface SourceContent {
   metadata: {
     type: string;
     createdAt: Date;
+    mimeType?: string;
+    fileName?: string;
+    fileSize?: number;
   };
 }
 
-const SourceCard: React.FC<SourceCardProps> = ({ source, onRemove, onView }) => {
+const SourceCard: React.FC<SourceCardProps> = ({
+  source,
+  onRemove,
+  onView,
+}) => {
   const [content, setContent] = useState<string>("");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -29,7 +36,20 @@ const SourceCard: React.FC<SourceCardProps> = ({ source, onRemove, onView }) => 
         setIsLoading(true);
         setError(null);
         const sourceData = await readDoc<SourceContent>(source.path);
-        setContent(sourceData?.content || "Content not found");
+        if (source.metadata.type === "pdf") {
+          // For PDFs, show extracted text preview and file info
+          const extractedText = sourceData?.content || "No text extracted";
+          const fileName = sourceData?.metadata.fileName || "Unknown file";
+          const fileSize = sourceData?.metadata.fileSize
+            ? `${(sourceData.metadata.fileSize / 1024 / 1024).toFixed(1)} MB`
+            : "Unknown size";
+          setContent(
+            `${fileName} (${fileSize})\n${extractedText.slice(0, 200)}${extractedText.length > 200 ? "..." : ""}`,
+          );
+        } else {
+          // For text sources, show content
+          setContent(sourceData?.content || "Content not found");
+        }
       } catch (err) {
         setError("Failed to load content");
         console.error("Error loading source content:", err);
@@ -45,13 +65,15 @@ const SourceCard: React.FC<SourceCardProps> = ({ source, onRemove, onView }) => 
     switch (type) {
       case "text":
         return "bg-green-100 text-green-700";
+      case "pdf":
+        return "bg-red-100 text-red-700";
       default:
         return "bg-gray-100 text-gray-700";
     }
   };
 
   return (
-    <div 
+    <div
       className="bg-gray-50 rounded-lg p-3 hover:bg-gray-100 transition-colors cursor-pointer group relative"
       onClick={() => onView(source)}
     >
