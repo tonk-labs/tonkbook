@@ -60,6 +60,7 @@ const NotesView = () => {
   ]);
   const [inputMessage, setInputMessage] = useState("");
   const [showJumpToBottom, setShowJumpToBottom] = useState(false);
+  const [isAIResponding, setIsAIResponding] = useState(false);
 
   // Update edited values when currentNote changes
   useEffect(() => {
@@ -128,30 +129,103 @@ const NotesView = () => {
     setIsEditingTitle(false);
   };
 
-  // Generate random lorem ipsum
-  const generateLoremIpsum = () => {
-    const sentences = [
-      "Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
-      "Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.",
-      "Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris.",
-      "Duis aute irure dolor in reprehenderit in voluptate velit esse cillum.",
-      "Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia.",
-      "Nulla pariatur excepteur sint occaecat cupidatat non proident.",
-      "At vero eos et accusamus et iusto odio dignissimos ducimus.",
-      "Et harum quidem rerum facilis est et expedita distinctio.",
-      "Nam libero tempore, cum soluta nobis est eligendi optio cumque.",
-      "Nihil impedit quo minus id quod maxime placeat facere possimus.",
-    ];
+  // Generate streaming AI response using the AI worker
+  const generateStreamingAIResponse = async (userMessage: string, messageId: string): Promise<void> => {
+    setIsAIResponding(true);
+    try {
+      // Build the conversation history for context
+      const conversationHistory = messages
+        .filter(msg => msg.type === "user" || msg.type === "assistant")
+        .map(msg => ({
+          role: msg.type === "user" ? "user" : "assistant" as const,
+          content: msg.content
+        }));
 
-    const numSentences = Math.floor(Math.random() * 4) + 1; // 1-4 sentences
-    const selectedSentences = [];
+      // Add the new user message
+      conversationHistory.push({
+        role: "user" as const,
+        content: userMessage
+      });
 
-    for (let i = 0; i < numSentences; i++) {
-      const randomIndex = Math.floor(Math.random() * sentences.length);
-      selectedSentences.push(sentences[randomIndex]);
+      const response = await fetch("http://localhost:5556/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messages: [
+            {
+              role: "system",
+              content: `You are a helpful assistant helping with note-taking and research for the note titled "${currentNote?.title}". ${currentNote?.subheading ? `The note's focus is: ${currentNote.subheading}. ` : ""}The user has ${sources.length} sources available for reference. Be concise and informative.`
+            },
+            ...conversationHistory
+          ],
+          model: "gpt-3.5-turbo",
+          temperature: 0.7,
+          max_tokens: 150,
+          stream: true
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let accumulatedContent = "";
+
+      if (!reader) {
+        throw new Error("No response body reader available");
+      }
+
+      // Read the stream
+      while (true) {
+        const { done, value } = await reader.read();
+        
+        if (done) {
+          break;
+        }
+
+        const chunk = decoder.decode(value, { stream: true });
+        accumulatedContent += chunk;
+
+        // Update the message with the accumulated content
+        setMessages((prev) => 
+          prev.map((msg) => 
+            msg.id === messageId 
+              ? { ...msg, content: accumulatedContent }
+              : msg
+          )
+        );
+
+        // Auto-scroll to bottom during streaming
+        setTimeout(() => scrollToBottom(true), 10);
+      }
+
+    } catch (error) {
+      console.error("AI streaming response error:", error);
+      let errorMessage = "Sorry, I'm having trouble responding right now. Please try again.";
+      
+      if (error instanceof Error) {
+        if (error.message.includes("Failed to fetch")) {
+          errorMessage = "Unable to connect to AI service. Please ensure the AI worker is running on port 5556.";
+        } else {
+          errorMessage = `AI service error: ${error.message}`;
+        }
+      }
+
+      // Update the message with the error
+      setMessages((prev) => 
+        prev.map((msg) => 
+          msg.id === messageId 
+            ? { ...msg, content: errorMessage }
+            : msg
+        )
+      );
+    } finally {
+      setIsAIResponding(false);
     }
-
-    return selectedSentences.join(" ");
   };
 
   // Handle adding text source from modal
@@ -188,7 +262,7 @@ const NotesView = () => {
 
   // Handle sending message
   const handleSendMessage = () => {
-    if (!inputMessage.trim()) return;
+    if (!inputMessage.trim() || isAIResponding) return;
 
     // Add user message
     const userMessage: ChatMessage = {
@@ -204,19 +278,23 @@ const NotesView = () => {
     // Smooth scroll to bottom after sending message
     setTimeout(() => scrollToBottom(true), 100);
 
-    // Simulate assistant response after a brief delay
-    setTimeout(() => {
+    // Generate streaming AI assistant response
+    setTimeout(async () => {
+      // Create the assistant message placeholder immediately
+      const assistantMessageId = (Date.now() + 1).toString();
       const assistantMessage: ChatMessage = {
-        id: (Date.now() + 1).toString(),
+        id: assistantMessageId,
         type: "assistant",
-        content: generateLoremIpsum(),
+        content: "", // Start with empty content
         timestamp: new Date(),
       };
 
+      // Add the empty assistant message to trigger streaming
       setMessages((prev) => [...prev, assistantMessage]);
-      // Smooth scroll to bottom after assistant response
-      setTimeout(() => scrollToBottom(true), 100);
-    }, 1000);
+
+      // Start the streaming response
+      await generateStreamingAIResponse(inputMessage.trim(), assistantMessageId);
+    }, 500);
   };
 
   // Handle key press in input
@@ -384,6 +462,9 @@ const NotesView = () => {
                 >
                   <p className="text-sm whitespace-pre-wrap">
                     {message.content}
+                    {message.type === "assistant" && isAIResponding && message.id === messages[messages.length - 1]?.id && (
+                      <span className="inline-block ml-1 animate-pulse">▋</span>
+                    )}
                   </p>
                   <p
                     className={`text-xs mt-1 ${
@@ -430,10 +511,14 @@ const NotesView = () => {
               />
               <button
                 onClick={handleSendMessage}
-                disabled={!inputMessage.trim()}
+                disabled={!inputMessage.trim() || isAIResponding}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center justify-center h-10"
               >
-                <SendIcon size={18} />
+                {isAIResponding ? (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                ) : (
+                  <SendIcon size={18} />
+                )}
               </button>
             </div>
           </div>

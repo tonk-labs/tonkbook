@@ -17,7 +17,7 @@ program
   .option(
     "-p, --port <port>",
     "Port to run the worker on",
-    process.env.WORKER_PORT || "5555",
+    process.env.WORKER_PORT || "5556",
   )
   .action(async (options) => {
     try {
