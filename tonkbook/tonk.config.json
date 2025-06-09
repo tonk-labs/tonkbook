@@ -1,0 +1,9 @@
+{
+  "name": "tonkbook",
+  "plan": {
+    "platform": "react",
+    "projectName": "tonkbook",
+    "description": "A notebook chat hybrid interface with agentic backend for drawing deep insights"
+  },
+  "template": "react"
+}
