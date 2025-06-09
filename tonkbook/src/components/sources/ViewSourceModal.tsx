@@ -93,14 +93,14 @@ const ViewSourceModal: React.FC<ViewSourceModalProps> = ({
 
       let updatedContent: SourceContent;
 
-      if (source.metadata.type === "pdf") {
-        // For PDFs, only update title, preserve all other data
+      if (source.metadata.type === "pdf" || source.metadata.type === "csv") {
+        // For PDFs and CSV files, only update title, preserve all other data
         updatedContent = {
           ...existingData,
           title: trimmedTitle,
         };
       } else {
-        // For text sources, update title and content
+        // For text, update title and content
         const trimmedContent = content.trim();
         updatedContent = {
           ...existingData,
@@ -162,7 +162,10 @@ const ViewSourceModal: React.FC<ViewSourceModalProps> = ({
                 onClick={() => setIsEditing(true)}
                 className="px-4 py-2 text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
               >
-                {source.metadata.type === "pdf" ? "Edit Title" : "Edit"}
+                {source.metadata.type === "pdf" ||
+                source.metadata.type === "csv"
+                  ? "Edit Title"
+                  : "Edit"}
               </button>
             )}
             <button
@@ -236,6 +239,39 @@ const ViewSourceModal: React.FC<ViewSourceModalProps> = ({
                     </div>
                   </div>
                 </div>
+              ) : source.metadata.type === "csv" ? (
+                <div className="space-y-4">
+                  {fileName && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        File Name
+                      </label>
+                      <p className="text-sm text-gray-900">{fileName}</p>
+                    </div>
+                  )}
+
+                  {fileSize && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        File Size
+                      </label>
+                      <p className="text-sm text-gray-900">
+                        {(fileSize / 1024).toFixed(2)} KB
+                      </p>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      CSV Content
+                    </label>
+                    <div className="bg-gray-50 rounded-lg p-4 min-h-[400px] border border-gray-200 max-h-[500px] overflow-y-auto">
+                      <pre className="whitespace-pre-wrap text-sm text-gray-700 font-mono">
+                        {content || "No CSV content available"}
+                      </pre>
+                    </div>
+                  </div>
+                </div>
               ) : (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -289,4 +325,3 @@ const ViewSourceModal: React.FC<ViewSourceModalProps> = ({
 };
 
 export default ViewSourceModal;
-

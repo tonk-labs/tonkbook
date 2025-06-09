@@ -46,6 +46,16 @@ const SourceCard: React.FC<SourceCardProps> = ({
           setContent(
             `${fileName} (${fileSize})\n${extractedText.slice(0, 200)}${extractedText.length > 200 ? "..." : ""}`,
           );
+        } else if (source.metadata.type === "csv") {
+          // For CSVs, show file info and data summary
+          const fileName = sourceData?.metadata.fileName || "Unknown file";
+          const fileSize = sourceData?.metadata.fileSize
+            ? `${(sourceData.metadata.fileSize / 1024).toFixed(1)} KB`
+            : "Unknown size";
+          const content = sourceData?.content || "No data available";
+          setContent(
+            `${fileName} (${fileSize})\n${content.slice(0, 200)}${content.length > 200 ? "..." : ""}`,
+          );
         } else {
           // For text sources, show content
           setContent(sourceData?.content || "Content not found");
@@ -67,6 +77,8 @@ const SourceCard: React.FC<SourceCardProps> = ({
         return "bg-green-100 text-green-700";
       case "pdf":
         return "bg-red-100 text-red-700";
+      case "csv":
+        return "bg-blue-100 text-blue-700";
       default:
         return "bg-gray-100 text-gray-700";
     }

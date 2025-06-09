@@ -1,14 +1,16 @@
 import React from "react";
-import { PlusIcon, FileTextIcon } from "lucide-react";
+import { PlusIcon, FileTextIcon, TableIcon } from "lucide-react";
 
 interface AddSourceButtonsProps {
   onAddText: () => void;
   onAddPdf: () => void;
+  onAddCsv: () => void;
 }
 
 const AddSourceButtons: React.FC<AddSourceButtonsProps> = ({
   onAddText,
   onAddPdf,
+  onAddCsv,
 }) => {
   return (
     <div className="mb-3 space-y-2">
@@ -25,6 +27,13 @@ const AddSourceButtons: React.FC<AddSourceButtonsProps> = ({
       >
         <FileTextIcon size={16} />
         Add PDF
+      </button>
+      <button
+        onClick={onAddCsv}
+        className="w-full flex items-center justify-center gap-2 text-sm bg-blue-50 hover:bg-blue-100 text-blue-700 px-4 py-2 rounded-full border border-blue-200 transition-colors"
+      >
+        <TableIcon size={16} />
+        Add CSV
       </button>
     </div>
   );

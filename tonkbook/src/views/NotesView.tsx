@@ -14,6 +14,7 @@ import {
 import { Source, ChatMessage } from "../types/source";
 import TextSourceModal from "../components/sources/TextSourceModal";
 import PDFSourceModal from "../components/sources/PDFSourceModal";
+import CSVSourceModal from "../components/sources/CSVSourceModal";
 import SourceCard from "../components/sources/SourceCard";
 import AddSourceButtons from "../components/sources/AddSourceButtons";
 import ViewSourceModal from "../components/sources/ViewSourceModal";
@@ -40,6 +41,7 @@ const NotesView = () => {
   const [isSourcesPanelOpen, setIsSourcesPanelOpen] = useState(true);
   const [showTextInputModal, setShowTextInputModal] = useState(false);
   const [showPDFInputModal, setShowPDFInputModal] = useState(false);
+  const [showCSVInputModal, setShowCSVInputModal] = useState(false);
   const [showViewSourceModal, setShowViewSourceModal] = useState(false);
   const [selectedSource, setSelectedSource] = useState<Source | null>(null);
 
@@ -157,6 +159,11 @@ const NotesView = () => {
 
   // Handle adding PDF source from modal
   const handleAddPDFSource = (sourceData: Omit<Source, "id">) => {
+    addSource(sourceData);
+  };
+
+  // Handle adding CSV source from modal
+  const handleAddCSVSource = (sourceData: Omit<Source, "id">) => {
     addSource(sourceData);
   };
 
@@ -327,6 +334,7 @@ const NotesView = () => {
               <AddSourceButtons
                 onAddText={() => setShowTextInputModal(true)}
                 onAddPdf={() => setShowPDFInputModal(true)}
+                onAddCsv={() => setShowCSVInputModal(true)}
               />
               {sources.map((source) => (
                 <SourceCard
@@ -434,6 +442,12 @@ const NotesView = () => {
         isOpen={showPDFInputModal}
         onClose={() => setShowPDFInputModal(false)}
         onAddSource={handleAddPDFSource}
+      />
+
+      <CSVSourceModal
+        isOpen={showCSVInputModal}
+        onClose={() => setShowCSVInputModal(false)}
+        onAddSource={handleAddCSVSource}
       />
 
       <ViewSourceModal
