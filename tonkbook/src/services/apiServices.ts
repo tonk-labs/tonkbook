@@ -9,4 +9,13 @@ export interface ApiService {
 }
 
 // Register all your services here
-export const apiServices: ApiService[] = [];
+export const apiServices: ApiService[] = [
+  {
+    prefix: "brave-search",
+    baseUrl: "https://api.search.brave.com",
+    requiresAuth: true,
+    authType: "apikey",
+    authHeaderName: "X-Subscription-Token",
+    authEnvVar: "BRAVE_SEARCH_API_KEY",
+  },
+];

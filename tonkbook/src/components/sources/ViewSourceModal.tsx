@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { readDoc, writeDoc } from "@tonk/keepsync";
 import { Source } from "../../types/source";
+import ReactMarkdown from "react-markdown";
 
 interface SourceContent {
   title: string;
@@ -11,6 +12,25 @@ interface SourceContent {
     mimeType?: string;
     fileName?: string;
     fileSize?: number;
+  };
+}
+
+interface WebSourceContent {
+  type: "scraped-content";
+  url: string;
+  title: string;
+  content: string;
+  markdown: string;
+  scrapedAt: string;
+  lastUpdated: string;
+  metadata: {
+    description?: string;
+    keywords?: string;
+    author?: string;
+    canonical?: string;
+    language?: string;
+    wordCount: number;
+    characterCount: number;
   };
 }
 
@@ -52,19 +72,32 @@ const ViewSourceModal: React.FC<ViewSourceModalProps> = ({
     try {
       setIsLoading(true);
       setError(null);
-      const sourceData = await readDoc<SourceContent>(source.path);
-      if (sourceData) {
-        setTitle(sourceData.title);
-        if (source.metadata.type === "pdf") {
-          setExtractedText(sourceData.content || "");
-          setFileSize(sourceData.metadata.fileSize || null);
-          setFileName(sourceData.metadata.fileName || "");
-          setContent(""); // PDFs don't have editable content
+
+      if (source.metadata.type === "web") {
+        // For web sources, use the web content interface
+        const webData = await readDoc<WebSourceContent>(source.path);
+        if (webData) {
+          setTitle(webData.title);
+          setContent(webData.markdown || "");
         } else {
-          setContent(sourceData.content || "");
+          setError("Web source content not found");
         }
       } else {
-        setError("Source content not found");
+        // For other source types, use the regular content interface
+        const sourceData = await readDoc<SourceContent>(source.path);
+        if (sourceData) {
+          setTitle(sourceData.title);
+          if (source.metadata.type === "pdf") {
+            setExtractedText(sourceData.content || "");
+            setFileSize(sourceData.metadata.fileSize || null);
+            setFileName(sourceData.metadata.fileName || "");
+            setContent(""); // PDFs don't have editable content
+          } else {
+            setContent(sourceData.content || "");
+          }
+        } else {
+          setError("Source content not found");
+        }
       }
     } catch (err) {
       setError("Failed to load source content");
@@ -77,40 +110,58 @@ const ViewSourceModal: React.FC<ViewSourceModalProps> = ({
   const handleSave = async () => {
     if (!source || !title.trim()) return;
 
-    // Only allow title editing for PDFs, full editing for text
+    // Only allow title editing for PDFs, CSVs and web, full editing for text
     if (source.metadata.type === "text" && !content.trim()) return;
 
     try {
       setIsSaving(true);
       const trimmedTitle = title.trim();
 
-      // Load existing content to preserve non-editable fields
-      const existingData = await readDoc<SourceContent>(source.path);
-      if (!existingData) {
-        setError("Could not load existing source data");
-        return;
-      }
+      if (source.metadata.type === "web") {
+        // For web sources, use the web content interface
+        const existingWebData = await readDoc<WebSourceContent>(source.path);
+        if (!existingWebData) {
+          setError("Could not load existing web source data");
+          return;
+        }
 
-      let updatedContent: SourceContent;
-
-      if (source.metadata.type === "pdf" || source.metadata.type === "csv") {
-        // For PDFs and CSV files, only update title, preserve all other data
-        updatedContent = {
-          ...existingData,
-          title: trimmedTitle,
-        };
-      } else {
-        // For text, update title and content
         const trimmedContent = content.trim();
-        updatedContent = {
-          ...existingData,
+        const updatedWebContent: WebSourceContent = {
+          ...existingWebData,
           title: trimmedTitle,
-          content: trimmedContent,
+          markdown: trimmedContent,
+          lastUpdated: new Date().toISOString(),
         };
-      }
 
-      // Save content to keepsync
-      await writeDoc(source.path, updatedContent);
+        await writeDoc(source.path, updatedWebContent);
+      } else {
+        // For other source types, use the regular content interface
+        const existingData = await readDoc<SourceContent>(source.path);
+        if (!existingData) {
+          setError("Could not load existing source data");
+          return;
+        }
+
+        let updatedContent: SourceContent;
+
+        if (source.metadata.type === "pdf" || source.metadata.type === "csv") {
+          // For PDFs and CSV files, only update title, preserve all other data
+          updatedContent = {
+            ...existingData,
+            title: trimmedTitle,
+          };
+        } else {
+          // For text, update title and content
+          const trimmedContent = content.trim();
+          updatedContent = {
+            ...existingData,
+            title: trimmedTitle,
+            content: trimmedContent,
+          };
+        }
+
+        await writeDoc(source.path, updatedContent);
+      }
 
       // Update the source title in the store if it changed
       if (trimmedTitle !== source.title && onUpdateSource) {
@@ -163,7 +214,8 @@ const ViewSourceModal: React.FC<ViewSourceModalProps> = ({
                 className="px-4 py-2 text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
               >
                 {source.metadata.type === "pdf" ||
-                source.metadata.type === "csv"
+                source.metadata.type === "csv" ||
+                source.metadata.type === "web"
                   ? "Edit Title"
                   : "Edit"}
               </button>
@@ -269,6 +321,80 @@ const ViewSourceModal: React.FC<ViewSourceModalProps> = ({
                       <pre className="whitespace-pre-wrap text-sm text-gray-700 font-mono">
                         {content || "No CSV content available"}
                       </pre>
+                    </div>
+                  </div>
+                </div>
+              ) : source.metadata.type === "web" ? (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Markdown Content
+                  </label>
+                  <div className="bg-white rounded-lg p-6 min-h-[400px] border border-gray-200 max-h-[500px] overflow-y-auto">
+                    <div className="prose max-w-none text-gray-900">
+                      <ReactMarkdown
+                        components={{
+                          h1: ({ children }) => (
+                            <h1 className="text-2xl font-bold mb-4 text-gray-900">
+                              {children}
+                            </h1>
+                          ),
+                          h2: ({ children }) => (
+                            <h2 className="text-xl font-semibold mb-3 text-gray-900">
+                              {children}
+                            </h2>
+                          ),
+                          h3: ({ children }) => (
+                            <h3 className="text-lg font-medium mb-2 text-gray-900">
+                              {children}
+                            </h3>
+                          ),
+                          p: ({ children }) => (
+                            <p className="mb-3 text-gray-700 leading-relaxed">
+                              {children}
+                            </p>
+                          ),
+                          ul: ({ children }) => (
+                            <ul className="list-disc list-inside mb-3 text-gray-700">
+                              {children}
+                            </ul>
+                          ),
+                          ol: ({ children }) => (
+                            <ol className="list-decimal list-inside mb-3 text-gray-700">
+                              {children}
+                            </ol>
+                          ),
+                          li: ({ children }) => (
+                            <li className="mb-1">{children}</li>
+                          ),
+                          blockquote: ({ children }) => (
+                            <blockquote className="border-l-4 border-gray-300 pl-4 italic my-4 text-gray-600">
+                              {children}
+                            </blockquote>
+                          ),
+                          code: ({ children }) => (
+                            <code className="bg-gray-100 px-1 py-0.5 rounded text-sm font-mono text-gray-800">
+                              {children}
+                            </code>
+                          ),
+                          pre: ({ children }) => (
+                            <pre className="bg-gray-100 p-4 rounded-lg overflow-x-auto mb-4">
+                              {children}
+                            </pre>
+                          ),
+                          a: ({ children, href }) => (
+                            <a
+                              href={href}
+                              className="text-blue-600 hover:text-blue-800 underline"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              {children}
+                            </a>
+                          ),
+                        }}
+                      >
+                        {content || "No content available"}
+                      </ReactMarkdown>
                     </div>
                   </div>
                 </div>

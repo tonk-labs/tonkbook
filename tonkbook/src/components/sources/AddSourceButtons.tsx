@@ -1,16 +1,18 @@
 import React from "react";
-import { PlusIcon, FileTextIcon, TableIcon } from "lucide-react";
+import { PlusIcon, FileTextIcon, TableIcon, SearchIcon } from "lucide-react";
 
 interface AddSourceButtonsProps {
   onAddText: () => void;
   onAddPdf: () => void;
   onAddCsv: () => void;
+  onAddWebSearch: () => void;
 }
 
 const AddSourceButtons: React.FC<AddSourceButtonsProps> = ({
   onAddText,
   onAddPdf,
   onAddCsv,
+  onAddWebSearch,
 }) => {
   return (
     <div className="mb-3 space-y-2">
@@ -34,6 +36,13 @@ const AddSourceButtons: React.FC<AddSourceButtonsProps> = ({
       >
         <TableIcon size={16} />
         Add CSV
+      </button>
+      <button
+        onClick={onAddWebSearch}
+        className="w-full flex items-center justify-center gap-2 text-sm bg-purple-50 hover:bg-purple-100 text-purple-700 px-4 py-2 rounded-full border border-purple-200 transition-colors"
+      >
+        <SearchIcon size={16} />
+        Web Search
       </button>
     </div>
   );
