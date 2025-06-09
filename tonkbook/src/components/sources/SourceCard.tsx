@@ -21,6 +21,25 @@ interface SourceContent {
   };
 }
 
+interface WebSourceContent {
+  type: "scraped-content";
+  url: string;
+  title: string;
+  content: string;
+  markdown: string;
+  scrapedAt: string;
+  lastUpdated: string;
+  metadata: {
+    description?: string;
+    keywords?: string;
+    author?: string;
+    canonical?: string;
+    language?: string;
+    wordCount: number;
+    characterCount: number;
+  };
+}
+
 const SourceCard: React.FC<SourceCardProps> = ({
   source,
   onRemove,
@@ -35,30 +54,50 @@ const SourceCard: React.FC<SourceCardProps> = ({
       try {
         setIsLoading(true);
         setError(null);
-        const sourceData = await readDoc<SourceContent>(source.path);
-        if (source.metadata.type === "pdf") {
-          // For PDFs, show extracted text preview and file info
-          const extractedText = sourceData?.content || "No text extracted";
-          const fileName = sourceData?.metadata.fileName || "Unknown file";
-          const fileSize = sourceData?.metadata.fileSize
-            ? `${(sourceData.metadata.fileSize / 1024 / 1024).toFixed(1)} MB`
-            : "Unknown size";
-          setContent(
-            `${fileName} (${fileSize})\n${extractedText.slice(0, 200)}${extractedText.length > 200 ? "..." : ""}`,
-          );
-        } else if (source.metadata.type === "csv") {
-          // For CSVs, show file info and data summary
-          const fileName = sourceData?.metadata.fileName || "Unknown file";
-          const fileSize = sourceData?.metadata.fileSize
-            ? `${(sourceData.metadata.fileSize / 1024).toFixed(1)} KB`
-            : "Unknown size";
-          const content = sourceData?.content || "No data available";
-          setContent(
-            `${fileName} (${fileSize})\n${content.slice(0, 200)}${content.length > 200 ? "..." : ""}`,
-          );
+        
+        if (source.metadata.type === "web") {
+          // For web sources, use the web content interface
+          const webData = await readDoc<WebSourceContent>(source.path);
+          if (webData) {
+            const markdown = webData.markdown || "No content available";
+            // Strip markdown syntax for preview
+            const plainText = markdown
+              .replace(/[#*_`~\[\]()]/g, "")
+              .replace(/!\[.*?\]\(.*?\)/g, "")
+              .replace(/\[.*?\]\(.*?\)/g, "")
+              .replace(/\n+/g, " ")
+              .trim();
+            setContent(plainText.slice(0, 200) + (plainText.length > 200 ? "..." : ""));
+          } else {
+            setContent("No content available");
+          }
         } else {
-          // For text sources, show content
-          setContent(sourceData?.content || "Content not found");
+          // For other source types, use the regular content interface
+          const sourceData = await readDoc<SourceContent>(source.path);
+          if (source.metadata.type === "pdf") {
+            // For PDFs, show extracted text preview and file info
+            const extractedText = sourceData?.content || "No text extracted";
+            const fileName = sourceData?.metadata.fileName || "Unknown file";
+            const fileSize = sourceData?.metadata.fileSize
+              ? `${(sourceData.metadata.fileSize / 1024 / 1024).toFixed(1)} MB`
+              : "Unknown size";
+            setContent(
+              `${fileName} (${fileSize})\n${extractedText.slice(0, 200)}${extractedText.length > 200 ? "..." : ""}`,
+            );
+          } else if (source.metadata.type === "csv") {
+            // For CSVs, show file info and data summary
+            const fileName = sourceData?.metadata.fileName || "Unknown file";
+            const fileSize = sourceData?.metadata.fileSize
+              ? `${(sourceData.metadata.fileSize / 1024).toFixed(1)} KB`
+              : "Unknown size";
+            const content = sourceData?.content || "No data available";
+            setContent(
+              `${fileName} (${fileSize})\n${content.slice(0, 200)}${content.length > 200 ? "..." : ""}`,
+            );
+          } else {
+            // For text sources, show content
+            setContent(sourceData?.content || "Content not found");
+          }
         }
       } catch (err) {
         setError("Failed to load content");
@@ -79,6 +118,8 @@ const SourceCard: React.FC<SourceCardProps> = ({
         return "bg-red-100 text-red-700";
       case "csv":
         return "bg-blue-100 text-blue-700";
+      case "web":
+        return "bg-purple-100 text-purple-700";
       default:
         return "bg-gray-100 text-gray-700";
     }

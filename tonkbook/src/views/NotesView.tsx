@@ -15,6 +15,7 @@ import { Source, ChatMessage } from "../types/source";
 import TextSourceModal from "../components/sources/TextSourceModal";
 import PDFSourceModal from "../components/sources/PDFSourceModal";
 import CSVSourceModal from "../components/sources/CSVSourceModal";
+import WebSearchModal from "../components/sources/WebSearchModal";
 import SourceCard from "../components/sources/SourceCard";
 import AddSourceButtons from "../components/sources/AddSourceButtons";
 import ViewSourceModal from "../components/sources/ViewSourceModal";
@@ -42,6 +43,7 @@ const NotesView = () => {
   const [showTextInputModal, setShowTextInputModal] = useState(false);
   const [showPDFInputModal, setShowPDFInputModal] = useState(false);
   const [showCSVInputModal, setShowCSVInputModal] = useState(false);
+  const [showWebSearchModal, setShowWebSearchModal] = useState(false);
   const [showViewSourceModal, setShowViewSourceModal] = useState(false);
   const [selectedSource, setSelectedSource] = useState<Source | null>(null);
 
@@ -165,6 +167,11 @@ const NotesView = () => {
   // Handle adding CSV source from modal
   const handleAddCSVSource = (sourceData: Omit<Source, "id">) => {
     addSource(sourceData);
+  };
+
+  // Handle adding multiple sources from web search
+  const handleAddWebSearchSources = (sources: Omit<Source, "id">[]) => {
+    sources.forEach(sourceData => addSource(sourceData));
   };
 
   // Handle viewing source
@@ -335,6 +342,7 @@ const NotesView = () => {
                 onAddText={() => setShowTextInputModal(true)}
                 onAddPdf={() => setShowPDFInputModal(true)}
                 onAddCsv={() => setShowCSVInputModal(true)}
+                onAddWebSearch={() => setShowWebSearchModal(true)}
               />
               {sources.map((source) => (
                 <SourceCard
@@ -448,6 +456,12 @@ const NotesView = () => {
         isOpen={showCSVInputModal}
         onClose={() => setShowCSVInputModal(false)}
         onAddSource={handleAddCSVSource}
+      />
+
+      <WebSearchModal
+        isOpen={showWebSearchModal}
+        onClose={() => setShowWebSearchModal(false)}
+        onAddSources={handleAddWebSearchSources}
       />
 
       <ViewSourceModal
