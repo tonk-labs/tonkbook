@@ -14,7 +14,11 @@ import {
   XCircleIcon,
   PanelLeft,
   SaveIcon,
+  DatabaseIcon,
+  AlertCircleIcon,
+  CheckCircleIcon,
 } from "lucide-react";
+import { useIndexingStatus } from "../hooks/useIndexingStatus";
 import { Source, ChatMessage } from "../types/source";
 import TextSourceModal from "../components/sources/TextSourceModal";
 import PDFSourceModal from "../components/sources/PDFSourceModal";
@@ -64,6 +68,9 @@ const NotesView = () => {
   const [inputMessage, setInputMessage] = useState("");
   const [showJumpToBottom, setShowJumpToBottom] = useState(false);
   const [isAIResponding, setIsAIResponding] = useState(false);
+
+  // Indexing status
+  const { status: indexingStatus, error: indexingError, isLoading: indexingLoading } = useIndexingStatus();
 
   // Update edited values when currentNote changes
   useEffect(() => {
@@ -327,6 +334,67 @@ const NotesView = () => {
     }
   };
 
+  // Render indexing status indicator
+  const renderIndexingStatus = () => {
+    if (indexingLoading) {
+      return (
+        <div className="flex items-center gap-2 text-sm text-gray-500">
+          <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-400"></div>
+          <span>Loading status...</span>
+        </div>
+      );
+    }
+
+    if (indexingError) {
+      return (
+        <div className="flex items-center gap-2 text-sm text-red-600" title={indexingError}>
+          <AlertCircleIcon size={14} />
+          <span>Indexing offline</span>
+        </div>
+      );
+    }
+
+    if (indexingStatus) {
+      const { progress } = indexingStatus.stats;
+      const isHealthy = indexingStatus.isInitialized;
+      const isIndexing = progress.isIndexing;
+      
+      if (isIndexing && progress.pendingCount > 0) {
+        // Show progress when actively indexing
+        return (
+          <div className="flex items-center gap-2 text-sm">
+            <div className="flex items-center gap-1">
+              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-500"></div>
+              <DatabaseIcon size={14} className="text-blue-600" />
+            </div>
+            <span className="text-blue-700">
+              Indexing {progress.indexedCount}/{progress.totalDiscovered} sources
+            </span>
+          </div>
+        );
+      }
+      
+      // Show completed state
+      return (
+        <div className="flex items-center gap-2 text-sm">
+          <div className="flex items-center gap-1">
+            {isHealthy ? (
+              <CheckCircleIcon size={14} className="text-green-600" />
+            ) : (
+              <AlertCircleIcon size={14} className="text-yellow-600" />
+            )}
+            <DatabaseIcon size={14} className={isHealthy ? "text-green-600" : "text-yellow-600"} />
+          </div>
+          <span className={isHealthy ? "text-green-700" : "text-yellow-700"}>
+            {progress.indexedCount} sources indexed
+          </span>
+        </div>
+      );
+    }
+
+    return null;
+  };
+
   if (!currentNote) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -425,7 +493,12 @@ const NotesView = () => {
               className={`flex items-center ${isSourcesPanelOpen ? "justify-between" : "justify-center"}`}
             >
               {isSourcesPanelOpen && (
-                <h2 className="text-lg font-semibold text-gray-900">Sources</h2>
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">Sources</h2>
+                  <div className="mt-1">
+                    {renderIndexingStatus()}
+                  </div>
+                </div>
               )}
               <button
                 onClick={() => setIsSourcesPanelOpen(!isSourcesPanelOpen)}

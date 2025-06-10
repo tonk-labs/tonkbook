@@ -18,6 +18,11 @@ export class IndexingService {
   private listeners: Map<string, () => void> = new Map();
   private isInitialized = false;
   private watchedPaths = new Set<string>();
+  private pendingIndexing = new Set<string>();
+  private indexedVectorSources = new Set<string>();
+  private indexedCsvSources = new Set<string>();
+  private lastIndexingActivity = new Date();
+  private totalSourcesFound = 0;
 
   async initialize(): Promise<void> {
     if (this.isInitialized) return;
@@ -27,8 +32,31 @@ export class IndexingService {
     // Initialize vector service
     await vectorService.initialize();
 
+    // Initialize tracked sources by scanning existing CSV sources
+    // (Vector sources will be added as they're discovered and indexed)
+    await this.initializeTrackedSources();
+
     this.isInitialized = true;
     console.log("Indexing Service: Initialized");
+  }
+
+  /**
+   * Initialize tracked sources from existing data
+   */
+  private async initializeTrackedSources(): Promise<void> {
+    try {
+      // Get existing CSV sources and add them to our tracking
+      const existingCsvSources = csvQueryService.getAllSources();
+      existingCsvSources.forEach((sourceId) => {
+        this.indexedCsvSources.add(sourceId);
+      });
+
+      console.log(
+        `Indexing Service: Initialized tracking for ${existingCsvSources.length} existing CSV sources`,
+      );
+    } catch (error) {
+      console.warn("Failed to initialize tracked sources:", error);
+    }
   }
 
   /**
@@ -47,6 +75,8 @@ export class IndexingService {
           const doc = payload.doc;
           if (doc && (doc.content || doc.rawCsvContent)) {
             console.log(`Source document changed: ${documentPath}`);
+            this.pendingIndexing.add(documentPath);
+            this.lastIndexingActivity = new Date();
             await this.indexSource(doc, documentPath);
           }
         },
@@ -58,8 +88,24 @@ export class IndexingService {
       // Also index the current document if it exists
       const currentDoc = await readDoc<SourceDocument>(documentPath);
       if (currentDoc && (currentDoc.content || currentDoc.rawCsvContent)) {
-        console.log(`Indexing existing document: ${documentPath}`);
-        await this.indexSource(currentDoc, documentPath);
+        const sourceId = currentDoc.id || documentPath.replace(/\//g, "_");
+        const sourceType = currentDoc.metadata?.type || "text";
+
+        // Check if already tracked to avoid re-indexing during startup
+        const isAlreadyTracked =
+          (sourceType === "csv" && this.indexedCsvSources.has(sourceId)) ||
+          (sourceType !== "csv" && this.indexedVectorSources.has(sourceId));
+
+        if (!isAlreadyTracked) {
+          console.log(`Indexing existing document: ${documentPath}`);
+          this.pendingIndexing.add(documentPath);
+          this.lastIndexingActivity = new Date();
+          await this.indexSource(currentDoc, documentPath);
+        } else {
+          console.log(
+            `Document already tracked: ${documentPath} (${sourceId})`,
+          );
+        }
       }
     } catch (error) {
       console.error(`Failed to watch source document ${documentPath}:`, error);
@@ -106,14 +152,18 @@ export class IndexingService {
         case "pdf":
         case "web":
           await vectorService.addDocument(source, doc.content!);
+          this.indexedVectorSources.add(sourceId);
           break;
         case "csv":
           // For CSV sources, use rawCsvContent instead of content
           const csvContent = doc.rawCsvContent || doc.content;
           if (csvContent) {
             await csvQueryService.addCSVSource(source, csvContent);
+            this.indexedCsvSources.add(sourceId);
           } else {
-            console.warn(`No rawCsvContent or content found for CSV source ${sourceId}`);
+            console.warn(
+              `No rawCsvContent or content found for CSV source ${sourceId}`,
+            );
           }
           break;
         default:
@@ -122,12 +172,19 @@ export class IndexingService {
             { ...source, metadata: { type: "text" as any } },
             doc.content!,
           );
+          this.indexedVectorSources.add(sourceId);
           break;
       }
 
       console.log(`Successfully indexed source ${sourceId}`);
+
+      // Remove from pending
+      this.pendingIndexing.delete(documentPath);
+      this.lastIndexingActivity = new Date();
     } catch (error) {
       console.error(`Failed to index source from ${documentPath}:`, error);
+      // Remove from pending even if failed to avoid stuck state
+      this.pendingIndexing.delete(documentPath);
     }
   }
 
@@ -164,16 +221,20 @@ export class IndexingService {
         // Handle DocNode structure
         if (docNode && docNode.children) {
           const children = docNode.children;
-          console.log(`Found ${children.length} items in ${dataPath}`);
+          const docChildren = children.filter((child) => child.type === "doc");
+          this.totalSourcesFound = docChildren.length;
+          console.log(
+            `Found ${docChildren.length} source documents in ${dataPath}`,
+          );
 
-          for (const child of children) {
-            if (child.type === "doc") {
-              const fullPath = `${dataPath}/${child.name}`;
-              if (!this.watchedPaths.has(fullPath)) {
-                console.log(`Setting up watch for document: ${fullPath}`);
-                await this.watchSourceDocument(fullPath);
-                this.watchedPaths.add(fullPath);
-              }
+          for (const child of docChildren) {
+            const fullPath = `${dataPath}/${child.name}`;
+            if (!this.watchedPaths.has(fullPath)) {
+              console.log(`Setting up watch for document: ${fullPath}`);
+              this.pendingIndexing.add(fullPath);
+              this.lastIndexingActivity = new Date();
+              await this.watchSourceDocument(fullPath);
+              this.watchedPaths.add(fullPath);
             }
           }
         } else {
@@ -196,17 +257,41 @@ export class IndexingService {
   async getStats(): Promise<{
     vectorSources: { count: number };
     csvSources: { count: number; sources: string[] };
+    progress: {
+      pendingCount: number;
+      indexedCount: number;
+      totalDiscovered: number;
+      isIndexing: boolean;
+      lastActivity: string;
+    };
   }> {
-    const [vectorStats, csvSources] = await Promise.all([
-      vectorService.getStats(),
-      csvQueryService.getAllSources(),
-    ]);
+    // Get CSV sources from the service to stay consistent
+    const csvSources = csvQueryService.getAllSources();
+
+    // Use our tracked counts for actual source documents (not chunks)
+    const vectorSourceCount = this.indexedVectorSources.size;
+    const csvSourceCount = this.indexedCsvSources.size;
+    const totalIndexed = vectorSourceCount + csvSourceCount;
+    const totalDiscovered = this.totalSourcesFound; // Total sources found in directory
+    const pendingCount = totalDiscovered - totalIndexed; // Remaining to index
+
+    // Consider indexing active if there's pending work or recent activity (last 10 seconds)
+    const isIndexing =
+      pendingCount > 0 ||
+      Date.now() - this.lastIndexingActivity.getTime() < 10000;
 
     return {
-      vectorSources: vectorStats,
+      vectorSources: { count: vectorSourceCount },
       csvSources: {
-        count: csvSources.length,
+        count: csvSourceCount,
         sources: csvSources,
+      },
+      progress: {
+        pendingCount,
+        indexedCount: totalIndexed,
+        totalDiscovered,
+        isIndexing,
+        lastActivity: this.lastIndexingActivity.toISOString(),
       },
     };
   }
@@ -225,4 +310,3 @@ export class IndexingService {
 }
 
 export const indexingService = new IndexingService();
-
