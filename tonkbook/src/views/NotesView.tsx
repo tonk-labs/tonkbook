@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useNotesStore } from "../stores/notesStore";
 import { useSourcesStore } from "../stores/sourcesStore";
 import { ragService } from "../services/ragService";
+import ReactMarkdown from "react-markdown";
 import {
   ArrowLeftIcon,
   SendIcon,
@@ -152,11 +153,13 @@ const NotesView = () => {
       // Stream the response chunks
       for await (const chunk of responseGenerator) {
         accumulatedResponse += chunk;
-        
+
         // Update the message with accumulated content in real-time
         setMessages((prev) =>
           prev.map((msg) =>
-            msg.id === messageId ? { ...msg, content: accumulatedResponse } : msg,
+            msg.id === messageId
+              ? { ...msg, content: accumulatedResponse }
+              : msg,
           ),
         );
       }
@@ -417,16 +420,21 @@ const NotesView = () => {
                       : "bg-white border border-gray-200 text-gray-900"
                   }`}
                 >
-                  <p className="text-sm whitespace-pre-wrap">
-                    {message.content}
-                    {message.type === "assistant" &&
-                      isAIResponding &&
-                      message.id === messages[messages.length - 1]?.id && (
-                        <span className="inline-block ml-1 animate-pulse">
-                          ▋
-                        </span>
-                      )}
-                  </p>
+                  {message.type === "assistant" ? (
+                    <div className="text-sm prose prose-sm max-w-none prose-headings:text-gray-900 prose-headings:font-semibold prose-h1:text-lg prose-h2:text-base prose-h3:text-sm prose-p:text-sm prose-p:text-gray-900 prose-strong:text-gray-900 prose-code:text-gray-800 prose-code:bg-gray-100 prose-code:px-1 prose-code:py-0.5 prose-code:rounded">
+                      <ReactMarkdown>{message.content}</ReactMarkdown>
+                      {isAIResponding &&
+                        message.id === messages[messages.length - 1]?.id && (
+                          <span className="inline-block ml-1 animate-pulse">
+                            ▋
+                          </span>
+                        )}
+                    </div>
+                  ) : (
+                    <p className="text-sm whitespace-pre-wrap">
+                      {message.content}
+                    </p>
+                  )}
                   <p
                     className={`text-xs mt-1 ${
                       message.type === "user"

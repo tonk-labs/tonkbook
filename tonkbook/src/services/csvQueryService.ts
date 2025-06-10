@@ -16,6 +16,7 @@ interface CSVQueryResult {
 
 export class CSVQueryService {
   private csvCache = new Map<string, CSVData>();
+  private sourceMetadata = new Map<string, { title: string; source: Source }>();
 
   /**
    * Parse and cache CSV content
@@ -45,6 +46,7 @@ export class CSVQueryService {
     };
 
     this.csvCache.set(source.id, csvData);
+    this.sourceMetadata.set(source.id, { title: source.title, source });
   }
 
   /**
@@ -52,6 +54,7 @@ export class CSVQueryService {
    */
   removeCSVSource(sourceId: string): void {
     this.csvCache.delete(sourceId);
+    this.sourceMetadata.delete(sourceId);
   }
 
   /**
@@ -224,9 +227,8 @@ export class CSVQueryService {
   }
 
   private getSourceTitle(sourceId: string): string {
-    // This would ideally come from the sources store
-    // For now, return a placeholder
-    return `CSV Source ${sourceId}`;
+    const metadata = this.sourceMetadata.get(sourceId);
+    return metadata?.title || `CSV Source ${sourceId}`;
   }
 
   /**
@@ -234,6 +236,25 @@ export class CSVQueryService {
    */
   getAllSources(): string[] {
     return Array.from(this.csvCache.keys());
+  }
+
+  /**
+   * Get all CSV sources with metadata
+   */
+  getAllSourcesWithMetadata(): Array<{ id: string; title: string; headers: string[]; rowCount: number }> {
+    const result: Array<{ id: string; title: string; headers: string[]; rowCount: number }> = [];
+    
+    for (const [sourceId, csvData] of this.csvCache.entries()) {
+      const metadata = this.sourceMetadata.get(sourceId);
+      result.push({
+        id: sourceId,
+        title: metadata?.title || `CSV Source ${sourceId}`,
+        headers: csvData.headers,
+        rowCount: csvData.rows.length,
+      });
+    }
+    
+    return result;
   }
 }
 
