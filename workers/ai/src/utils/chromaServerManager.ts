@@ -12,7 +12,7 @@ export class ChromaServerManager {
   }
 
   private createChromaConfig(): string {
-    const configPath = join(process.cwd(), 'config.yaml');
+    const configPath = join(process.cwd(), "config.yaml");
 
     const config = `########################
 # HTTP server settings #
@@ -37,6 +37,12 @@ allow_reset: true
       return;
     }
 
+    // Check if server is already running
+    if (await this.checkHealth()) {
+      console.log("✅ Chroma server is already running");
+      return;
+    }
+
     this.isStarting = true;
 
     return new Promise((resolve, reject) => {
@@ -44,8 +50,8 @@ allow_reset: true
 
       // Create config file with CORS enabled
       const configPath = this.createChromaConfig();
-      const dataDir = join(process.cwd(), 'chroma-data');
-      
+      const dataDir = join(process.cwd(), "chroma-data");
+
       try {
         mkdirSync(dataDir, { recursive: true });
       } catch (error) {
@@ -58,9 +64,12 @@ allow_reset: true
         [
           "run",
           "--rm",
-          "-p", `${this.port}:8000`,
-          "-v", `${dataDir}:/data`,
-          "-v", `${configPath}:/config.yaml`,
+          "-p",
+          `${this.port}:8000`,
+          "-v",
+          `${dataDir}:/data`,
+          "-v",
+          `${configPath}:/config.yaml`,
           "chromadb/chroma",
         ],
         {
@@ -69,24 +78,29 @@ allow_reset: true
       );
 
       let hasStarted = false;
+      let startupCheckInterval: NodeJS.Timeout;
 
-      // Handle stdout
+      // Start polling for server readiness
+      const checkServerReady = async () => {
+        const isHealthy = await this.checkHealth();
+        if (isHealthy && !hasStarted) {
+          hasStarted = true;
+          this.isStarting = false;
+          if (startupCheckInterval) {
+            clearInterval(startupCheckInterval);
+          }
+          console.log("✅ Chroma server started successfully");
+          resolve();
+        }
+      };
+
+      // Check every 2 seconds
+      startupCheckInterval = setInterval(checkServerReady, 2000);
+
+      // Handle stdout - just for logging
       this.chromaProcess.stdout?.on("data", (data) => {
         const output = data.toString();
         console.log(`Chroma: ${output.trim()}`);
-
-        // Look for startup indicators
-        if (
-          output.includes("Uvicorn running") ||
-          output.includes("server started")
-        ) {
-          if (!hasStarted) {
-            hasStarted = true;
-            this.isStarting = false;
-            console.log("✅ Chroma server started successfully");
-            resolve();
-          }
-        }
       });
 
       // Handle stderr
@@ -99,6 +113,9 @@ allow_reset: true
           error.includes("docker: command not found") ||
           error.includes("Cannot connect to the Docker daemon")
         ) {
+          if (startupCheckInterval) {
+            clearInterval(startupCheckInterval);
+          }
           console.log(
             "Docker not available, attempting to start Chroma directly...",
           );
@@ -110,6 +127,9 @@ allow_reset: true
       this.chromaProcess.on("exit", (code, signal) => {
         this.chromaProcess = null;
         this.isStarting = false;
+        if (startupCheckInterval) {
+          clearInterval(startupCheckInterval);
+        }
 
         if (code !== 0 && !hasStarted) {
           console.log("Docker method failed, trying Python installation...");
@@ -124,6 +144,9 @@ allow_reset: true
       // Handle spawn error
       this.chromaProcess.on("error", (error) => {
         this.isStarting = false;
+        if (startupCheckInterval) {
+          clearInterval(startupCheckInterval);
+        }
         console.error("Failed to start Chroma with Docker:", error.message);
         this.startWithPython().then(resolve).catch(reject);
       });
@@ -132,6 +155,9 @@ allow_reset: true
       setTimeout(() => {
         if (!hasStarted) {
           this.isStarting = false;
+          if (startupCheckInterval) {
+            clearInterval(startupCheckInterval);
+          }
           reject(new Error("Chroma server startup timeout"));
         }
       }, 30000);
@@ -152,21 +178,29 @@ allow_reset: true
       );
 
       let hasStarted = false;
+      let startupCheckInterval: NodeJS.Timeout;
 
+      // Start polling for server readiness
+      const checkServerReady = async () => {
+        const isHealthy = await this.checkHealth();
+        if (isHealthy && !hasStarted) {
+          hasStarted = true;
+          this.isStarting = false;
+          if (startupCheckInterval) {
+            clearInterval(startupCheckInterval);
+          }
+          console.log("✅ Chroma server started successfully with Python");
+          resolve();
+        }
+      };
+
+      // Check every 2 seconds
+      startupCheckInterval = setInterval(checkServerReady, 2000);
+
+      // Handle stdout - just for logging
       this.chromaProcess.stdout?.on("data", (data) => {
         const output = data.toString();
         console.log(`Chroma: ${output.trim()}`);
-
-        if (
-          output.includes("Uvicorn running") ||
-          output.includes("server started")
-        ) {
-          if (!hasStarted) {
-            hasStarted = true;
-            console.log("✅ Chroma server started successfully with Python");
-            resolve();
-          }
-        }
       });
 
       this.chromaProcess.stderr?.on("data", (data) => {
@@ -176,6 +210,10 @@ allow_reset: true
 
       this.chromaProcess.on("exit", (code) => {
         this.chromaProcess = null;
+        this.isStarting = false;
+        if (startupCheckInterval) {
+          clearInterval(startupCheckInterval);
+        }
         if (code !== 0 && !hasStarted) {
           reject(
             new Error(`Chroma server failed to start (exit code: ${code})`),
@@ -184,11 +222,19 @@ allow_reset: true
       });
 
       this.chromaProcess.on("error", (error) => {
+        this.isStarting = false;
+        if (startupCheckInterval) {
+          clearInterval(startupCheckInterval);
+        }
         reject(new Error(`Failed to start Chroma: ${error.message}`));
       });
 
       setTimeout(() => {
         if (!hasStarted) {
+          this.isStarting = false;
+          if (startupCheckInterval) {
+            clearInterval(startupCheckInterval);
+          }
           reject(new Error("Chroma server startup timeout (Python method)"));
         }
       }, 30000);
@@ -232,7 +278,7 @@ allow_reset: true
   async checkHealth(): Promise<boolean> {
     try {
       const response = await fetch(
-        `http://localhost:${this.port}/api/v1/heartbeat`,
+        `http://localhost:${this.port}/api/v2/heartbeat`,
       );
       return response.ok;
     } catch {

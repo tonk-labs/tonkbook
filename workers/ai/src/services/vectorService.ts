@@ -33,7 +33,7 @@ export class VectorService {
 
   constructor() {
     this.client = new ChromaClient({
-      path: "http://localhost:8888",
+      port: 8888,
     });
   }
 
@@ -231,4 +231,3 @@ export class VectorService {
 }
 
 export const vectorService = new VectorService();
-
