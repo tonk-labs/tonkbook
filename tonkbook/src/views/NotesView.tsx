@@ -568,13 +568,9 @@ const NotesView = () => {
                 >
                   {message.type === "assistant" ? (
                     <div className="text-sm prose prose-sm max-w-none prose-headings:text-gray-900 prose-headings:font-semibold prose-h1:text-lg prose-h2:text-base prose-h3:text-sm prose-p:text-sm prose-p:text-gray-900 prose-strong:text-gray-900 prose-code:text-gray-800 prose-code:bg-gray-100 prose-code:px-1 prose-code:py-0.5 prose-code:rounded">
-                      <ReactMarkdown>{message.content}</ReactMarkdown>
-                      {isAIResponding &&
-                        message.id === messages[messages.length - 1]?.id && (
-                          <span className="inline-block ml-1 animate-pulse">
-                            ▋
-                          </span>
-                        )}
+                      <ReactMarkdown>
+                        {message.content + (isAIResponding && message.id === messages[messages.length - 1]?.id ? "▋" : "")}
+                      </ReactMarkdown>
                     </div>
                   ) : (
                     <p className="text-sm whitespace-pre-wrap">
