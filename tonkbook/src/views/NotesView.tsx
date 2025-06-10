@@ -129,7 +129,7 @@ const NotesView = () => {
     setIsEditingTitle(false);
   };
 
-  // Generate RAG-enhanced AI response
+  // Generate RAG-enhanced AI response with streaming
   const generateRAGResponse = async (
     userMessage: string,
     messageId: string,
@@ -141,18 +141,25 @@ const NotesView = () => {
         ? `Note: ${currentNote.title}${currentNote.subheading ? `\nFocus: ${currentNote.subheading}` : ""}`
         : undefined;
 
-      // Use RAG service to generate response with source context
-      const result = await ragService.generateResponse(
+      // Use RAG service to generate streaming response with source context
+      const responseGenerator = ragService.generateStreamingResponse(
         userMessage,
         noteContext,
       );
 
-      // Update the message with the response
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === messageId ? { ...msg, content: result.response } : msg,
-        ),
-      );
+      let accumulatedResponse = "";
+
+      // Stream the response chunks
+      for await (const chunk of responseGenerator) {
+        accumulatedResponse += chunk;
+        
+        // Update the message with accumulated content in real-time
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === messageId ? { ...msg, content: accumulatedResponse } : msg,
+          ),
+        );
+      }
     } catch (error) {
       console.error("RAG response error:", error);
       let errorMessage =

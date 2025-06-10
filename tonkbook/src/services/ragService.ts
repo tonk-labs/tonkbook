@@ -152,7 +152,32 @@ export class RAGService {
   }
 
   /**
-   * Generate an AI response using RAG context
+   * Generate an AI response using RAG context with streaming
+   */
+  async *generateStreamingResponse(
+    query: string,
+    noteContext?: string,
+    options?: QueryOptions,
+  ): AsyncGenerator<string, RAGResult, unknown> {
+    const ragResult = await this.queryRelevantSources(query, options);
+
+    const systemPrompt = this.buildSystemPrompt(ragResult, noteContext);
+    const messages = this.buildChatMessages(query, ragResult, systemPrompt);
+
+    try {
+      for await (const chunk of this.streamAIWorkerChat(messages)) {
+        yield chunk;
+      }
+    } catch (error) {
+      console.error("Failed to stream AI response:", error);
+      yield "Sorry, I encountered an error while generating the response.";
+    }
+
+    return ragResult;
+  }
+
+  /**
+   * Generate an AI response using RAG context (non-streaming fallback)
    */
   async generateResponse(
     query: string,
@@ -162,9 +187,9 @@ export class RAGService {
     const ragResult = await this.queryRelevantSources(query, options);
 
     const systemPrompt = this.buildSystemPrompt(ragResult, noteContext);
-    const userPrompt = this.buildUserPrompt(query, ragResult);
+    const messages = this.buildChatMessages(query, ragResult, systemPrompt);
 
-    const aiResponse = await this.callAIWorker(systemPrompt, userPrompt);
+    const aiResponse = await this.callAIWorkerChat(messages);
 
     return {
       response: aiResponse,
@@ -179,7 +204,7 @@ export class RAGService {
     ragResult: RAGResult,
     noteContext?: string,
   ): string {
-    let prompt = `You are a helpful assistant with access to relevant information from various sources. Use the provided context to answer questions accurately and cite your sources when appropriate.
+    let prompt = `You are a knowledgeable research assistant with access to relevant information from various sources. Your role is to provide thoughtful, analytical, and comprehensive responses that synthesize information across sources.
 
 AVAILABLE CONTEXT:
 ${ragResult.combinedContext}`;
@@ -189,46 +214,106 @@ ${ragResult.combinedContext}`;
 ${noteContext}`;
     }
 
-    prompt += `\n\nInstructions:
-- Use the provided context to answer questions
-- If information is not available in the context, say so clearly
-- When referencing specific information, mention the source
-- For CSV data, you can reference specific data points
-- Be concise but thorough in your responses`;
+    prompt += `\n\nResponse Guidelines:
+- Provide analytical, long-form responses that explore the topic in depth
+- Synthesize information across multiple sources when possible
+- Always cite your sources using format like "(Source: [Title])" when referencing specific information
+- Include concrete details, data points, and examples from the sources
+- Offer nuanced perspectives and consider multiple viewpoints
+- Draw connections between different pieces of information
+- If information is limited or missing, acknowledge this while still providing what insights you can
+- Structure responses with clear reasoning and logical flow
+- Aim for substantive, thoughtful analysis rather than brief answers`;
 
     return prompt;
   }
 
   /**
-   * Build user prompt
+   * Build chat messages for the conversation
    */
-  private buildUserPrompt(query: string, ragResult: RAGResult): string {
+  private buildChatMessages(query: string, ragResult: RAGResult, systemPrompt: string) {
     const sourceCount =
       ragResult.textSources.length + ragResult.csvSources.length;
-    return `${query}
+    
+    return [
+      { role: "system" as const, content: systemPrompt },
+      { 
+        role: "user" as const, 
+        content: `${query}
 
-(I have ${sourceCount} relevant sources available for this query)`;
+(I have ${sourceCount} relevant sources available to help answer this question. Please provide a comprehensive, analytical response that synthesizes the available information.)` 
+      }
+    ];
   }
 
   /**
-   * Call the AI worker for response generation
+   * Stream AI worker chat response
    */
-  private async callAIWorker(
-    systemPrompt: string,
-    userPrompt: string,
-  ): Promise<string> {
+  private async *streamAIWorkerChat(
+    messages: Array<{role: string, content: string}>
+  ): AsyncGenerator<string, void, unknown> {
     try {
-      const response = await fetch("http://localhost:5556/api/complete", {
+      const response = await fetch("http://localhost:5556/api/chat", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          prompt: userPrompt,
-          system: systemPrompt,
-          model: "gpt-3.5-turbo",
+          messages,
+          model: "gpt-4o",
           temperature: 0.7,
-          max_tokens: 500,
+          max_tokens: 1500,
+          stream: true,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`AI worker request failed: ${response.statusText}`);
+      }
+
+      if (!response.body) {
+        throw new Error("No response body received");
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value, { stream: true });
+          if (chunk.trim()) {
+            yield chunk;
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+    } catch (error) {
+      console.error("Failed to stream AI worker chat:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Call AI worker chat (non-streaming)
+   */
+  private async callAIWorkerChat(
+    messages: Array<{role: string, content: string}>
+  ): Promise<string> {
+    try {
+      const response = await fetch("http://localhost:5556/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messages,
+          model: "gpt-4o",
+          temperature: 0.7,
+          max_tokens: 1500,
         }),
       });
 
