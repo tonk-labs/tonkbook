@@ -17,13 +17,20 @@ program
   .option(
     "-p, --port <port>",
     "Port to run the worker on",
-    process.env.WORKER_PORT || "5555",
+    process.env.WORKER_PORT || "5556",
+  )
+  .option(
+    "-c, --chroma-port <port>",
+    "Port to run Chroma server on",
+    process.env.CHROMA_PORT || "8888",
   )
   .action(async (options) => {
     try {
       console.log(`Starting ai worker on port ${options.port}...`);
+      console.log(`Chroma will run on port ${options.chromaPort}...`);
       await startWorker({
         port: parseInt(options.port, 10),
+        chromaPort: parseInt(options.chromaPort, 10),
       });
       console.log(`ai worker is running`);
     } catch (error) {

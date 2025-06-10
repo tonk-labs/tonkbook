@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useNotesStore } from "../stores/notesStore";
 import { useSourcesStore } from "../stores/sourcesStore";
+import { ragService } from "../services/ragService";
 import {
   ArrowLeftIcon,
   SendIcon,
@@ -47,7 +48,6 @@ const NotesView = () => {
   const [showViewSourceModal, setShowViewSourceModal] = useState(false);
   const [selectedSource, setSelectedSource] = useState<Source | null>(null);
 
-
   // Chat state
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -60,6 +60,7 @@ const NotesView = () => {
   ]);
   const [inputMessage, setInputMessage] = useState("");
   const [showJumpToBottom, setShowJumpToBottom] = useState(false);
+  const [isAIResponding, setIsAIResponding] = useState(false);
 
   // Update edited values when currentNote changes
   useEffect(() => {
@@ -128,30 +129,53 @@ const NotesView = () => {
     setIsEditingTitle(false);
   };
 
-  // Generate random lorem ipsum
-  const generateLoremIpsum = () => {
-    const sentences = [
-      "Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
-      "Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.",
-      "Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris.",
-      "Duis aute irure dolor in reprehenderit in voluptate velit esse cillum.",
-      "Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia.",
-      "Nulla pariatur excepteur sint occaecat cupidatat non proident.",
-      "At vero eos et accusamus et iusto odio dignissimos ducimus.",
-      "Et harum quidem rerum facilis est et expedita distinctio.",
-      "Nam libero tempore, cum soluta nobis est eligendi optio cumque.",
-      "Nihil impedit quo minus id quod maxime placeat facere possimus.",
-    ];
+  // Generate RAG-enhanced AI response
+  const generateRAGResponse = async (
+    userMessage: string,
+    messageId: string,
+  ): Promise<void> => {
+    setIsAIResponding(true);
+    try {
+      // Get note content as context (title + subheading)
+      const noteContext = currentNote
+        ? `Note: ${currentNote.title}${currentNote.subheading ? `\nFocus: ${currentNote.subheading}` : ""}`
+        : undefined;
 
-    const numSentences = Math.floor(Math.random() * 4) + 1; // 1-4 sentences
-    const selectedSentences = [];
+      // Use RAG service to generate response with source context
+      const result = await ragService.generateResponse(
+        userMessage,
+        noteContext,
+      );
 
-    for (let i = 0; i < numSentences; i++) {
-      const randomIndex = Math.floor(Math.random() * sentences.length);
-      selectedSentences.push(sentences[randomIndex]);
+      // Update the message with the response
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === messageId ? { ...msg, content: result.response } : msg,
+        ),
+      );
+    } catch (error) {
+      console.error("RAG response error:", error);
+      let errorMessage =
+        "Sorry, I'm having trouble responding right now. Please try again.";
+
+      if (error instanceof Error) {
+        if (error.message.includes("Failed to fetch")) {
+          errorMessage =
+            "Unable to connect to AI service. Please ensure the AI worker is running on port 5556.";
+        } else {
+          errorMessage = `AI service error: ${error.message}`;
+        }
+      }
+
+      // Update the message with the error
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === messageId ? { ...msg, content: errorMessage } : msg,
+        ),
+      );
+    } finally {
+      setIsAIResponding(false);
     }
-
-    return selectedSentences.join(" ");
   };
 
   // Handle adding text source from modal
@@ -171,7 +195,7 @@ const NotesView = () => {
 
   // Handle adding multiple sources from web search
   const handleAddWebSearchSources = (sources: Omit<Source, "id">[]) => {
-    sources.forEach(sourceData => addSource(sourceData));
+    sources.forEach((sourceData) => addSource(sourceData));
   };
 
   // Handle viewing source
@@ -188,7 +212,7 @@ const NotesView = () => {
 
   // Handle sending message
   const handleSendMessage = () => {
-    if (!inputMessage.trim()) return;
+    if (!inputMessage.trim() || isAIResponding) return;
 
     // Add user message
     const userMessage: ChatMessage = {
@@ -204,19 +228,23 @@ const NotesView = () => {
     // Smooth scroll to bottom after sending message
     setTimeout(() => scrollToBottom(true), 100);
 
-    // Simulate assistant response after a brief delay
-    setTimeout(() => {
+    // Generate streaming AI assistant response
+    setTimeout(async () => {
+      // Create the assistant message placeholder immediately
+      const assistantMessageId = (Date.now() + 1).toString();
       const assistantMessage: ChatMessage = {
-        id: (Date.now() + 1).toString(),
+        id: assistantMessageId,
         type: "assistant",
-        content: generateLoremIpsum(),
+        content: "", // Start with empty content
         timestamp: new Date(),
       };
 
+      // Add the empty assistant message to trigger streaming
       setMessages((prev) => [...prev, assistantMessage]);
-      // Smooth scroll to bottom after assistant response
-      setTimeout(() => scrollToBottom(true), 100);
-    }, 1000);
+
+      // Start the RAG response
+      await generateRAGResponse(inputMessage.trim(), assistantMessageId);
+    }, 500);
   };
 
   // Handle key press in input
@@ -384,6 +412,13 @@ const NotesView = () => {
                 >
                   <p className="text-sm whitespace-pre-wrap">
                     {message.content}
+                    {message.type === "assistant" &&
+                      isAIResponding &&
+                      message.id === messages[messages.length - 1]?.id && (
+                        <span className="inline-block ml-1 animate-pulse">
+                          ▋
+                        </span>
+                      )}
                   </p>
                   <p
                     className={`text-xs mt-1 ${
@@ -430,10 +465,14 @@ const NotesView = () => {
               />
               <button
                 onClick={handleSendMessage}
-                disabled={!inputMessage.trim()}
+                disabled={!inputMessage.trim() || isAIResponding}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center justify-center h-10"
               >
-                <SendIcon size={18} />
+                {isAIResponding ? (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                ) : (
+                  <SendIcon size={18} />
+                )}
               </button>
             </div>
           </div>
