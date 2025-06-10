@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useNotesStore } from "../stores/notesStore";
 import { useSourcesStore } from "../stores/sourcesStore";
+import { ragService } from "../services/ragService";
 import {
   ArrowLeftIcon,
   SendIcon,
@@ -46,7 +47,6 @@ const NotesView = () => {
   const [showWebSearchModal, setShowWebSearchModal] = useState(false);
   const [showViewSourceModal, setShowViewSourceModal] = useState(false);
   const [selectedSource, setSelectedSource] = useState<Source | null>(null);
-
 
   // Chat state
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -129,99 +129,49 @@ const NotesView = () => {
     setIsEditingTitle(false);
   };
 
-  // Generate streaming AI response using the AI worker
-  const generateStreamingAIResponse = async (userMessage: string, messageId: string): Promise<void> => {
+  // Generate RAG-enhanced AI response
+  const generateRAGResponse = async (
+    userMessage: string,
+    messageId: string,
+  ): Promise<void> => {
     setIsAIResponding(true);
     try {
-      // Build the conversation history for context
-      const conversationHistory = messages
-        .filter(msg => msg.type === "user" || msg.type === "assistant")
-        .map(msg => ({
-          role: msg.type === "user" ? "user" : "assistant" as const,
-          content: msg.content
-        }));
+      // Get note content as context (title + subheading)
+      const noteContext = currentNote
+        ? `Note: ${currentNote.title}${currentNote.subheading ? `\nFocus: ${currentNote.subheading}` : ""}`
+        : undefined;
 
-      // Add the new user message
-      conversationHistory.push({
-        role: "user" as const,
-        content: userMessage
-      });
+      // Use RAG service to generate response with source context
+      const result = await ragService.generateResponse(
+        userMessage,
+        noteContext,
+      );
 
-      const response = await fetch("http://localhost:5556/api/chat", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          messages: [
-            {
-              role: "system",
-              content: `You are a helpful assistant helping with note-taking and research for the note titled "${currentNote?.title}". ${currentNote?.subheading ? `The note's focus is: ${currentNote.subheading}. ` : ""}The user has ${sources.length} sources available for reference. Be concise and informative.`
-            },
-            ...conversationHistory
-          ],
-          model: "gpt-3.5-turbo",
-          temperature: 0.7,
-          max_tokens: 150,
-          stream: true
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-      let accumulatedContent = "";
-
-      if (!reader) {
-        throw new Error("No response body reader available");
-      }
-
-      // Read the stream
-      while (true) {
-        const { done, value } = await reader.read();
-        
-        if (done) {
-          break;
-        }
-
-        const chunk = decoder.decode(value, { stream: true });
-        accumulatedContent += chunk;
-
-        // Update the message with the accumulated content
-        setMessages((prev) => 
-          prev.map((msg) => 
-            msg.id === messageId 
-              ? { ...msg, content: accumulatedContent }
-              : msg
-          )
-        );
-
-        // Auto-scroll to bottom during streaming
-        setTimeout(() => scrollToBottom(true), 10);
-      }
-
+      // Update the message with the response
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === messageId ? { ...msg, content: result.response } : msg,
+        ),
+      );
     } catch (error) {
-      console.error("AI streaming response error:", error);
-      let errorMessage = "Sorry, I'm having trouble responding right now. Please try again.";
-      
+      console.error("RAG response error:", error);
+      let errorMessage =
+        "Sorry, I'm having trouble responding right now. Please try again.";
+
       if (error instanceof Error) {
         if (error.message.includes("Failed to fetch")) {
-          errorMessage = "Unable to connect to AI service. Please ensure the AI worker is running on port 5556.";
+          errorMessage =
+            "Unable to connect to AI service. Please ensure the AI worker is running on port 5556.";
         } else {
           errorMessage = `AI service error: ${error.message}`;
         }
       }
 
       // Update the message with the error
-      setMessages((prev) => 
-        prev.map((msg) => 
-          msg.id === messageId 
-            ? { ...msg, content: errorMessage }
-            : msg
-        )
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === messageId ? { ...msg, content: errorMessage } : msg,
+        ),
       );
     } finally {
       setIsAIResponding(false);
@@ -245,7 +195,7 @@ const NotesView = () => {
 
   // Handle adding multiple sources from web search
   const handleAddWebSearchSources = (sources: Omit<Source, "id">[]) => {
-    sources.forEach(sourceData => addSource(sourceData));
+    sources.forEach((sourceData) => addSource(sourceData));
   };
 
   // Handle viewing source
@@ -292,8 +242,8 @@ const NotesView = () => {
       // Add the empty assistant message to trigger streaming
       setMessages((prev) => [...prev, assistantMessage]);
 
-      // Start the streaming response
-      await generateStreamingAIResponse(inputMessage.trim(), assistantMessageId);
+      // Start the RAG response
+      await generateRAGResponse(inputMessage.trim(), assistantMessageId);
     }, 500);
   };
 
@@ -462,9 +412,13 @@ const NotesView = () => {
                 >
                   <p className="text-sm whitespace-pre-wrap">
                     {message.content}
-                    {message.type === "assistant" && isAIResponding && message.id === messages[messages.length - 1]?.id && (
-                      <span className="inline-block ml-1 animate-pulse">▋</span>
-                    )}
+                    {message.type === "assistant" &&
+                      isAIResponding &&
+                      message.id === messages[messages.length - 1]?.id && (
+                        <span className="inline-block ml-1 animate-pulse">
+                          ▋
+                        </span>
+                      )}
                   </p>
                   <p
                     className={`text-xs mt-1 ${

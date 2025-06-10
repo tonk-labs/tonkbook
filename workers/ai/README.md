@@ -1,6 +1,6 @@
 # AI Worker
 
-A Tonk worker that provides a unified API for interacting with Large Language Models (LLMs). Currently supports OpenAI's GPT models with a flexible architecture designed for easy extension to other providers like Llama.
+A Tonk worker that provides a unified API for interacting with Large Language Models (LLMs) and vector databases. Currently supports OpenAI's GPT models and includes an integrated Chroma vector database for RAG (Retrieval-Augmented Generation) capabilities.
 
 ## Quick Start
 
@@ -19,16 +19,42 @@ This will prompt you to paste your OpenAI API key. Get one from [OpenAI API Keys
 pnpm start
 ```
 
-The worker will start on `http://localhost:5555` with API endpoints at `/api/`.
+The worker will start on `http://localhost:5556` with API endpoints at `/api/`.
+Additionally, it will automatically start a Chroma vector database server on `http://localhost:8888`.
+
+**Prerequisites for Chroma:**
+- Docker (recommended) OR
+- Python with `pip install chromadb`
+
+The worker will attempt to start Chroma via Docker first, then fall back to a local Python installation if Docker is unavailable.
 
 ## API Endpoints
+
+### GET /health
+
+Health check endpoint that shows the status of both AI worker and Chroma server.
+
+```bash
+curl http://localhost:5556/health
+```
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "services": {
+    "ai": "running",
+    "chroma": "running"
+  }
+}
+```
 
 ### GET /api/providers
 
 Lists available LLM providers and their configuration status.
 
 ```bash
-curl http://localhost:5555/api/providers
+curl http://localhost:5556/api/providers
 ```
 
 **Response:**
@@ -97,7 +123,7 @@ Both `/api/chat` and `/api/complete` support streaming by setting `"stream": tru
 
 **Example:**
 ```bash
-curl -X POST http://localhost:5555/api/complete \
+curl -X POST http://localhost:5556/api/complete \
   -H "Content-Type: application/json" \
   -d '{
     "prompt": "Write a short poem about coding",
@@ -142,11 +168,14 @@ pnpm dev
 # Setup credentials
 npx tsx dist/cli.js setup
 
-# Start worker
+# Start worker (default ports: AI=5556, Chroma=8888)
 npx tsx dist/cli.js start
 
-# Start on custom port
-npx tsx dist/cli.js start --port 3000
+# Start on custom ports
+npx tsx dist/cli.js start --port 3000 --chroma-port 8001
+
+# Environment variables
+WORKER_PORT=5556 CHROMA_PORT=8888 npx tsx dist/cli.js start
 ```
 
 ## Architecture
