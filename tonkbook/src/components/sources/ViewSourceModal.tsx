@@ -144,8 +144,8 @@ const ViewSourceModal: React.FC<ViewSourceModalProps> = ({
 
         let updatedContent: SourceContent;
 
-        if (source.metadata.type === "pdf" || source.metadata.type === "csv") {
-          // For PDFs and CSV files, only update title, preserve all other data
+        if (source.metadata.type === "pdf" || source.metadata.type === "csv" || source.metadata.type === "ai") {
+          // For PDFs, CSV files, and AI sources, only update title, preserve all other data
           updatedContent = {
             ...existingData,
             title: trimmedTitle,
@@ -215,7 +215,8 @@ const ViewSourceModal: React.FC<ViewSourceModalProps> = ({
               >
                 {source.metadata.type === "pdf" ||
                 source.metadata.type === "csv" ||
-                source.metadata.type === "web"
+                source.metadata.type === "web" ||
+                source.metadata.type === "ai"
                   ? "Edit Title"
                   : "Edit"}
               </button>
@@ -321,6 +322,60 @@ const ViewSourceModal: React.FC<ViewSourceModalProps> = ({
                       <pre className="whitespace-pre-wrap text-sm text-gray-700 font-mono">
                         {content || "No CSV content available"}
                       </pre>
+                    </div>
+                  </div>
+                </div>
+              ) : source.metadata.type === "ai" ? (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    AI Chat Content
+                  </label>
+                  <div className="bg-white rounded-lg p-6 min-h-[400px] border border-gray-200 max-h-[500px] overflow-y-auto">
+                    <div className="prose max-w-none text-gray-900">
+                      <ReactMarkdown
+                        components={{
+                          h1: ({ children }) => (
+                            <h1 className="text-2xl font-bold mb-4 text-gray-900">
+                              {children}
+                            </h1>
+                          ),
+                          h2: ({ children }) => (
+                            <h2 className="text-xl font-semibold mb-3 text-gray-900">
+                              {children}
+                            </h2>
+                          ),
+                          h3: ({ children }) => (
+                            <h3 className="text-lg font-medium mb-2 text-gray-900">
+                              {children}
+                            </h3>
+                          ),
+                          p: ({ children }) => (
+                            <p className="mb-3 text-gray-700 leading-relaxed">
+                              {children}
+                            </p>
+                          ),
+                          strong: ({ children }) => (
+                            <strong className="font-semibold text-gray-900">
+                              {children}
+                            </strong>
+                          ),
+                          code: ({ children }) => (
+                            <code className="bg-gray-100 px-1 py-0.5 rounded text-sm font-mono text-gray-800">
+                              {children}
+                            </code>
+                          ),
+                          pre: ({ children }) => (
+                            <pre className="bg-gray-100 p-4 rounded-lg overflow-x-auto mb-4">
+                              {children}
+                            </pre>
+                          ),
+                          hr: () => (
+                            <hr className="border-gray-300 my-6" />
+                          ),
+                        }}
+                      >
+                        {content || "No chat content available"}
+                      </ReactMarkdown>
                     </div>
                   </div>
                 </div>

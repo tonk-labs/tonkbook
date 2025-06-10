@@ -3,6 +3,8 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useNotesStore } from "../stores/notesStore";
 import { useSourcesStore } from "../stores/sourcesStore";
 import { ragService } from "../services/ragService";
+import ReactMarkdown from "react-markdown";
+import { writeDoc } from "@tonk/keepsync";
 import {
   ArrowLeftIcon,
   SendIcon,
@@ -11,6 +13,7 @@ import {
   CheckIcon,
   XCircleIcon,
   PanelLeft,
+  SaveIcon,
 } from "lucide-react";
 import { Source, ChatMessage } from "../types/source";
 import TextSourceModal from "../components/sources/TextSourceModal";
@@ -129,7 +132,7 @@ const NotesView = () => {
     setIsEditingTitle(false);
   };
 
-  // Generate RAG-enhanced AI response
+  // Generate RAG-enhanced AI response with streaming
   const generateRAGResponse = async (
     userMessage: string,
     messageId: string,
@@ -141,18 +144,27 @@ const NotesView = () => {
         ? `Note: ${currentNote.title}${currentNote.subheading ? `\nFocus: ${currentNote.subheading}` : ""}`
         : undefined;
 
-      // Use RAG service to generate response with source context
-      const result = await ragService.generateResponse(
+      // Use RAG service to generate streaming response with source context
+      const responseGenerator = ragService.generateStreamingResponse(
         userMessage,
         noteContext,
       );
 
-      // Update the message with the response
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === messageId ? { ...msg, content: result.response } : msg,
-        ),
-      );
+      let accumulatedResponse = "";
+
+      // Stream the response chunks
+      for await (const chunk of responseGenerator) {
+        accumulatedResponse += chunk;
+
+        // Update the message with accumulated content in real-time
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === messageId
+              ? { ...msg, content: accumulatedResponse }
+              : msg,
+          ),
+        );
+      }
     } catch (error) {
       console.error("RAG response error:", error);
       let errorMessage =
@@ -208,6 +220,66 @@ const NotesView = () => {
   const handleCloseViewSource = () => {
     setShowViewSourceModal(false);
     setSelectedSource(null);
+  };
+
+  // Handle saving chat as AI source
+  const handleSaveChatAsSource = async () => {
+    if (messages.length <= 1) return; // Don't save if only initial message
+
+    const chatTitle = currentNote?.title 
+      ? `AI Chat - ${currentNote.title}` 
+      : `AI Chat - ${new Date().toLocaleDateString()}`;
+    
+    // Convert messages to markdown format
+    const chatContent = messages
+      .filter(msg => msg.id !== "1") // Exclude initial greeting message
+      .map(msg => {
+        const timestamp = msg.timestamp.toLocaleString();
+        const role = msg.type === "user" ? "**User**" : "**Assistant**";
+        return `${role} (${timestamp}):\n${msg.content}\n`;
+      })
+      .join("\n---\n\n");
+
+    const sourcePath = `tonkbook/data/${chatTitle}`;
+
+    // Create the AI source content document
+    const sourceContent = {
+      title: chatTitle,
+      content: chatContent,
+      messages: messages.filter(msg => msg.id !== "1"), // Store original messages too
+      metadata: {
+        type: "ai",
+        createdAt: new Date().toISOString(),
+        noteId: currentNote?.id,
+        noteTitle: currentNote?.title,
+      },
+    };
+
+    try {
+      // Write the content to keepsync
+      await writeDoc(sourcePath, sourceContent);
+
+      // Create the source reference for the store
+      const sourceReference: Omit<Source, "id"> = {
+        title: chatTitle,
+        path: sourcePath,
+        metadata: {
+          type: "ai",
+          createdAt: new Date().toISOString(),
+        },
+      };
+
+      // Add to sources store
+      const sourceId = addSource(sourceReference);
+      
+      if (sourceId) {
+        // Show success feedback (could add a toast notification here)
+        console.log("Chat saved as AI source:", sourceId);
+      }
+    } catch (error) {
+      console.error("Failed to save chat as source:", error);
+      // Could add error notification here
+    }
   };
 
   // Handle sending message
@@ -389,7 +461,18 @@ const NotesView = () => {
           className={`${isSourcesPanelOpen ? "w-2/3" : "flex-1"} flex flex-col h-full relative`}
         >
           <div className="p-4 border-b border-gray-200 bg-white flex-shrink-0">
-            <h2 className="text-lg font-semibold text-gray-900">Chat</h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900">Chat</h2>
+              <button
+                onClick={handleSaveChatAsSource}
+                disabled={messages.length <= 1}
+                className="px-3 py-1 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                title="Save chat as AI source"
+              >
+                <SaveIcon size={16} />
+                Save as Source
+              </button>
+            </div>
           </div>
 
           {/* Messages */}
@@ -410,16 +493,21 @@ const NotesView = () => {
                       : "bg-white border border-gray-200 text-gray-900"
                   }`}
                 >
-                  <p className="text-sm whitespace-pre-wrap">
-                    {message.content}
-                    {message.type === "assistant" &&
-                      isAIResponding &&
-                      message.id === messages[messages.length - 1]?.id && (
-                        <span className="inline-block ml-1 animate-pulse">
-                          ▋
-                        </span>
-                      )}
-                  </p>
+                  {message.type === "assistant" ? (
+                    <div className="text-sm prose prose-sm max-w-none prose-headings:text-gray-900 prose-headings:font-semibold prose-h1:text-lg prose-h2:text-base prose-h3:text-sm prose-p:text-sm prose-p:text-gray-900 prose-strong:text-gray-900 prose-code:text-gray-800 prose-code:bg-gray-100 prose-code:px-1 prose-code:py-0.5 prose-code:rounded">
+                      <ReactMarkdown>{message.content}</ReactMarkdown>
+                      {isAIResponding &&
+                        message.id === messages[messages.length - 1]?.id && (
+                          <span className="inline-block ml-1 animate-pulse">
+                            ▋
+                          </span>
+                        )}
+                    </div>
+                  ) : (
+                    <p className="text-sm whitespace-pre-wrap">
+                      {message.content}
+                    </p>
+                  )}
                   <p
                     className={`text-xs mt-1 ${
                       message.type === "user"

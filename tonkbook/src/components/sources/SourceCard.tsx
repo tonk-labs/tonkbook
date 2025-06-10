@@ -94,6 +94,16 @@ const SourceCard: React.FC<SourceCardProps> = ({
             setContent(
               `${fileName} (${fileSize})\n${content.slice(0, 200)}${content.length > 200 ? "..." : ""}`,
             );
+          } else if (source.metadata.type === "ai") {
+            // For AI sources, show chat summary
+            const content = sourceData?.content || "No chat content available";
+            // Strip markdown syntax and show preview
+            const plainText = content
+              .replace(/\*\*(.*?)\*\*/g, "$1") // Remove bold markdown
+              .replace(/\n---\n/g, " | ") // Replace separators
+              .replace(/\n+/g, " ") // Replace newlines with spaces
+              .trim();
+            setContent(plainText.slice(0, 200) + (plainText.length > 200 ? "..." : ""));
           } else {
             // For text sources, show content
             setContent(sourceData?.content || "Content not found");
@@ -120,6 +130,8 @@ const SourceCard: React.FC<SourceCardProps> = ({
         return "bg-blue-100 text-blue-700";
       case "web":
         return "bg-purple-100 text-purple-700";
+      case "ai":
+        return "bg-orange-100 text-orange-700";
       default:
         return "bg-gray-100 text-gray-700";
     }
