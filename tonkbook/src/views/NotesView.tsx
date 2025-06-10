@@ -4,6 +4,7 @@ import { useNotesStore } from "../stores/notesStore";
 import { useSourcesStore } from "../stores/sourcesStore";
 import { ragService } from "../services/ragService";
 import ReactMarkdown from "react-markdown";
+import { writeDoc } from "@tonk/keepsync";
 import {
   ArrowLeftIcon,
   SendIcon,
@@ -12,6 +13,7 @@ import {
   CheckIcon,
   XCircleIcon,
   PanelLeft,
+  SaveIcon,
 } from "lucide-react";
 import { Source, ChatMessage } from "../types/source";
 import TextSourceModal from "../components/sources/TextSourceModal";
@@ -220,6 +222,66 @@ const NotesView = () => {
     setSelectedSource(null);
   };
 
+  // Handle saving chat as AI source
+  const handleSaveChatAsSource = async () => {
+    if (messages.length <= 1) return; // Don't save if only initial message
+
+    const chatTitle = currentNote?.title 
+      ? `AI Chat - ${currentNote.title}` 
+      : `AI Chat - ${new Date().toLocaleDateString()}`;
+    
+    // Convert messages to markdown format
+    const chatContent = messages
+      .filter(msg => msg.id !== "1") // Exclude initial greeting message
+      .map(msg => {
+        const timestamp = msg.timestamp.toLocaleString();
+        const role = msg.type === "user" ? "**User**" : "**Assistant**";
+        return `${role} (${timestamp}):\n${msg.content}\n`;
+      })
+      .join("\n---\n\n");
+
+    const sourcePath = `tonkbook/data/${chatTitle}`;
+
+    // Create the AI source content document
+    const sourceContent = {
+      title: chatTitle,
+      content: chatContent,
+      messages: messages.filter(msg => msg.id !== "1"), // Store original messages too
+      metadata: {
+        type: "ai",
+        createdAt: new Date().toISOString(),
+        noteId: currentNote?.id,
+        noteTitle: currentNote?.title,
+      },
+    };
+
+    try {
+      // Write the content to keepsync
+      await writeDoc(sourcePath, sourceContent);
+
+      // Create the source reference for the store
+      const sourceReference: Omit<Source, "id"> = {
+        title: chatTitle,
+        path: sourcePath,
+        metadata: {
+          type: "ai",
+          createdAt: new Date().toISOString(),
+        },
+      };
+
+      // Add to sources store
+      const sourceId = addSource(sourceReference);
+      
+      if (sourceId) {
+        // Show success feedback (could add a toast notification here)
+        console.log("Chat saved as AI source:", sourceId);
+      }
+    } catch (error) {
+      console.error("Failed to save chat as source:", error);
+      // Could add error notification here
+    }
+  };
+
   // Handle sending message
   const handleSendMessage = () => {
     if (!inputMessage.trim() || isAIResponding) return;
@@ -399,7 +461,18 @@ const NotesView = () => {
           className={`${isSourcesPanelOpen ? "w-2/3" : "flex-1"} flex flex-col h-full relative`}
         >
           <div className="p-4 border-b border-gray-200 bg-white flex-shrink-0">
-            <h2 className="text-lg font-semibold text-gray-900">Chat</h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900">Chat</h2>
+              <button
+                onClick={handleSaveChatAsSource}
+                disabled={messages.length <= 1}
+                className="px-3 py-1 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                title="Save chat as AI source"
+              >
+                <SaveIcon size={16} />
+                Save as Source
+              </button>
+            </div>
           </div>
 
           {/* Messages */}
