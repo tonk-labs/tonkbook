@@ -12,7 +12,7 @@ interface SearchResult {
 interface WebSearchModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddSources: (sources: Omit<Source, "id">[]) => void;
+  onAddSources: (sources: Omit<Source, "id" | "noteId">[]) => void;
 }
 
 const WebSearchModal: React.FC<WebSearchModalProps> = ({
@@ -138,7 +138,7 @@ const WebSearchModal: React.FC<WebSearchModalProps> = ({
 
     try {
       const selectedUrls = Array.from(selectedResults);
-      const scrapedSources: Omit<Source, "id">[] = [];
+      const scrapedSources: Omit<Source, "id" | "noteId">[] = [];
 
       // Process each selected URL through the web scraper worker
       for (const url of selectedUrls) {
@@ -185,7 +185,7 @@ const WebSearchModal: React.FC<WebSearchModalProps> = ({
               "Scraped Content";
 
             // Create a web source from the scraped content
-            const source: Omit<Source, "id"> = {
+            const source: Omit<Source, "id" | "noteId"> = {
               title: title,
               path: scrapedData.outputPath,
               metadata: {

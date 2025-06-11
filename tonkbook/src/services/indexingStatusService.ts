@@ -1,4 +1,4 @@
-const AI_WORKER_URL = import.meta.env.VITE_AI_WORKER_URL || 'http://localhost:5556';
+// const AI_WORKER_URL = import.meta.env.VITE_AI_WORKER_URL || 'http://localhost:5556';
 
 export interface IndexingStats {
   vectorSources: { count: number };
@@ -26,20 +26,24 @@ export interface IndexingStatusError {
 export class IndexingStatusService {
   async getStatus(): Promise<IndexingStatus | IndexingStatusError> {
     try {
-      const response = await fetch(`${AI_WORKER_URL}/api/indexing/status`);
-      
+      const response = await fetch(`http://localhost:5556/api/indexing/status`);
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      
+
       return await response.json();
     } catch (error) {
-      console.error('Failed to fetch indexing status:', error);
-      return { 
-        error: error instanceof Error ? error.message : 'Failed to fetch indexing status' 
+      console.error("Failed to fetch indexing status:", error);
+      return {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to fetch indexing status",
       };
     }
   }
 }
 
 export const indexingStatusService = new IndexingStatusService();
+

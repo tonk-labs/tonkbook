@@ -5,7 +5,7 @@ import { writeDoc } from "@tonk/keepsync";
 interface TextSourceModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddSource: (source: Omit<Source, "id">) => void;
+  onAddSource: (source: Omit<Source, "id" | "noteId">) => void;
 }
 
 const TextSourceModal: React.FC<TextSourceModalProps> = ({
@@ -37,7 +37,7 @@ const TextSourceModal: React.FC<TextSourceModalProps> = ({
     await writeDoc(sourcePath, sourceContent);
 
     // Create the source reference for the store
-    const sourceReference: Omit<Source, "id"> = {
+    const sourceReference: Omit<Source, "id" | "noteId"> = {
       title: trimmedTitle,
       path: sourcePath,
       metadata: {

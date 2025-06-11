@@ -5,7 +5,7 @@ import { writeDoc } from "@tonk/keepsync";
 interface CSVSourceModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddSource: (source: Omit<Source, "id">) => void;
+  onAddSource: (source: Omit<Source, "id" | "noteId">) => void;
 }
 
 const CSVSourceModal: React.FC<CSVSourceModalProps> = ({
@@ -136,7 +136,7 @@ const CSVSourceModal: React.FC<CSVSourceModalProps> = ({
       await writeDoc(sourcePath, sourceContent);
 
       // Create the source reference for the store
-      const sourceReference: Omit<Source, "id"> = {
+      const sourceReference: Omit<Source, "id" | "noteId"> = {
         title: trimmedTitle,
         path: sourcePath,
         metadata: {

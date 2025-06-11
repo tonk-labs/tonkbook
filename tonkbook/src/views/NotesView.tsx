@@ -32,12 +32,16 @@ const NotesView = () => {
   const { noteId } = useParams<{ noteId: string }>();
   const navigate = useNavigate();
   const { notes, updateNote } = useNotesStore();
-  const { sources, addSource, removeSource, updateSource } = useSourcesStore();
+  const { addSource, removeSource, updateSource, getSourcesByNoteId } =
+    useSourcesStore();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
   // Find the current note
   const currentNote = notes.find((note) => note.id === noteId);
+
+  // Filter sources for the current note
+  const sources = currentNote ? getSourcesByNoteId(currentNote.id) : [];
 
   // Title and subheading editing state
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -70,7 +74,11 @@ const NotesView = () => {
   const [isAIResponding, setIsAIResponding] = useState(false);
 
   // Indexing status
-  const { status: indexingStatus, error: indexingError, isLoading: indexingLoading } = useIndexingStatus();
+  const {
+    status: indexingStatus,
+    error: indexingError,
+    isLoading: indexingLoading,
+  } = useIndexingStatus();
 
   // Update edited values when currentNote changes
   useEffect(() => {
@@ -198,23 +206,31 @@ const NotesView = () => {
   };
 
   // Handle adding text source from modal
-  const handleAddTextSource = (sourceData: Omit<Source, "id">) => {
-    addSource(sourceData);
+  const handleAddTextSource = (sourceData: Omit<Source, "id" | "noteId">) => {
+    if (!currentNote) return;
+    addSource({ ...sourceData, noteId: currentNote.id });
   };
 
   // Handle adding PDF source from modal
-  const handleAddPDFSource = (sourceData: Omit<Source, "id">) => {
-    addSource(sourceData);
+  const handleAddPDFSource = (sourceData: Omit<Source, "id" | "noteId">) => {
+    if (!currentNote) return;
+    addSource({ ...sourceData, noteId: currentNote.id });
   };
 
   // Handle adding CSV source from modal
-  const handleAddCSVSource = (sourceData: Omit<Source, "id">) => {
-    addSource(sourceData);
+  const handleAddCSVSource = (sourceData: Omit<Source, "id" | "noteId">) => {
+    if (!currentNote) return;
+    addSource({ ...sourceData, noteId: currentNote.id });
   };
 
   // Handle adding multiple sources from web search
-  const handleAddWebSearchSources = (sources: Omit<Source, "id">[]) => {
-    sources.forEach((sourceData) => addSource(sourceData));
+  const handleAddWebSearchSources = (
+    sources: Omit<Source, "id" | "noteId">[],
+  ) => {
+    if (!currentNote) return;
+    sources.forEach((sourceData) =>
+      addSource({ ...sourceData, noteId: currentNote.id }),
+    );
   };
 
   // Handle viewing source
@@ -233,14 +249,14 @@ const NotesView = () => {
   const handleSaveChatAsSource = async () => {
     if (messages.length <= 1) return; // Don't save if only initial message
 
-    const chatTitle = currentNote?.title 
-      ? `AI Chat - ${currentNote.title}` 
+    const chatTitle = currentNote?.title
+      ? `AI Chat - ${currentNote.title}`
       : `AI Chat - ${new Date().toLocaleDateString()}`;
-    
+
     // Convert messages to markdown format
     const chatContent = messages
-      .filter(msg => msg.id !== "1") // Exclude initial greeting message
-      .map(msg => {
+      .filter((msg) => msg.id !== "1") // Exclude initial greeting message
+      .map((msg) => {
         const timestamp = msg.timestamp.toLocaleString();
         const role = msg.type === "user" ? "**User**" : "**Assistant**";
         return `${role} (${timestamp}):\n${msg.content}\n`;
@@ -253,7 +269,7 @@ const NotesView = () => {
     const sourceContent = {
       title: chatTitle,
       content: chatContent,
-      messages: messages.filter(msg => msg.id !== "1"), // Store original messages too
+      messages: messages.filter((msg) => msg.id !== "1"), // Store original messages too
       metadata: {
         type: "ai",
         createdAt: new Date().toISOString(),
@@ -270,6 +286,7 @@ const NotesView = () => {
       const sourceReference: Omit<Source, "id"> = {
         title: chatTitle,
         path: sourcePath,
+        noteId: currentNote?.id || "",
         metadata: {
           type: "ai",
           createdAt: new Date().toISOString(),
@@ -278,7 +295,7 @@ const NotesView = () => {
 
       // Add to sources store
       const sourceId = addSource(sourceReference);
-      
+
       if (sourceId) {
         // Show success feedback (could add a toast notification here)
         console.log("Chat saved as AI source:", sourceId);
@@ -347,7 +364,10 @@ const NotesView = () => {
 
     if (indexingError) {
       return (
-        <div className="flex items-center gap-2 text-sm text-red-600" title={indexingError}>
+        <div
+          className="flex items-center gap-2 text-sm text-red-600"
+          title={indexingError}
+        >
           <AlertCircleIcon size={14} />
           <span>Indexing offline</span>
         </div>
@@ -358,7 +378,7 @@ const NotesView = () => {
       const { progress } = indexingStatus.stats;
       const isHealthy = indexingStatus.isInitialized;
       const isIndexing = progress.isIndexing;
-      
+
       if (isIndexing && progress.pendingCount > 0) {
         // Show progress when actively indexing
         return (
@@ -368,12 +388,13 @@ const NotesView = () => {
               <DatabaseIcon size={14} className="text-blue-600" />
             </div>
             <span className="text-blue-700">
-              Indexing {progress.indexedCount}/{progress.totalDiscovered} sources
+              Indexing {progress.indexedCount}/{progress.totalDiscovered}{" "}
+              sources
             </span>
           </div>
         );
       }
-      
+
       // Show completed state
       return (
         <div className="flex items-center gap-2 text-sm">
@@ -383,7 +404,10 @@ const NotesView = () => {
             ) : (
               <AlertCircleIcon size={14} className="text-yellow-600" />
             )}
-            <DatabaseIcon size={14} className={isHealthy ? "text-green-600" : "text-yellow-600"} />
+            <DatabaseIcon
+              size={14}
+              className={isHealthy ? "text-green-600" : "text-yellow-600"}
+            />
           </div>
           <span className={isHealthy ? "text-green-700" : "text-yellow-700"}>
             {progress.indexedCount} sources indexed
@@ -494,10 +518,10 @@ const NotesView = () => {
             >
               {isSourcesPanelOpen && (
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-900">Sources</h2>
-                  <div className="mt-1">
-                    {renderIndexingStatus()}
-                  </div>
+                  <h2 className="text-lg font-semibold text-gray-900">
+                    Sources
+                  </h2>
+                  <div className="mt-1">{renderIndexingStatus()}</div>
                 </div>
               )}
               <button
@@ -536,15 +560,17 @@ const NotesView = () => {
           <div className="p-4 border-b border-gray-200 bg-white flex-shrink-0">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-gray-900">Chat</h2>
-              <button
-                onClick={handleSaveChatAsSource}
-                disabled={messages.length <= 1}
-                className="px-3 py-1 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-                title="Save chat as AI source"
-              >
-                <SaveIcon size={16} />
-                Save as Source
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleSaveChatAsSource}
+                  disabled={messages.length <= 1}
+                  className="px-3 py-1 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                  title="Save chat as AI source"
+                >
+                  <SaveIcon size={16} />
+                  Save as Source
+                </button>
+              </div>
             </div>
           </div>
 
@@ -569,7 +595,11 @@ const NotesView = () => {
                   {message.type === "assistant" ? (
                     <div className="text-sm prose prose-sm max-w-none prose-headings:text-gray-900 prose-headings:font-semibold prose-h1:text-lg prose-h2:text-base prose-h3:text-sm prose-p:text-sm prose-p:text-gray-900 prose-strong:text-gray-900 prose-code:text-gray-800 prose-code:bg-gray-100 prose-code:px-1 prose-code:py-0.5 prose-code:rounded">
                       <ReactMarkdown>
-                        {message.content + (isAIResponding && message.id === messages[messages.length - 1]?.id ? "▋" : "")}
+                        {message.content +
+                          (isAIResponding &&
+                          message.id === messages[messages.length - 1]?.id
+                            ? "▋"
+                            : "")}
                       </ReactMarkdown>
                     </div>
                   ) : (
