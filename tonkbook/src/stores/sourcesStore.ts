@@ -23,6 +23,8 @@ interface SourcesActions {
   removeSource: (id: string) => boolean;
   /** Update an existing source's title or path, returns success status */
   updateSource: (id: string, updates: Partial<Pick<Source, 'title' | 'path'>>) => boolean;
+  /** Get sources filtered by noteId */
+  getSourcesByNoteId: (noteId: string) => Source[];
 }
 
 type SourcesStore = SourcesState & SourcesActions;
@@ -36,7 +38,7 @@ export const useSourcesStore = create<SourcesStore>(
       // Data management actions
       addSource: (sourceData: Omit<Source, 'id'>) => {
         // Simple validation - return null for invalid input
-        if (!sourceData.title?.trim() || !sourceData.path?.trim()) {
+        if (!sourceData.title?.trim() || !sourceData.path?.trim() || !sourceData.noteId?.trim()) {
           return null;
         }
 
@@ -47,6 +49,7 @@ export const useSourcesStore = create<SourcesStore>(
           id,
           title: sourceData.title.trim(),
           path: sourceData.path.trim(),
+          noteId: sourceData.noteId.trim(),
         };
 
         set((state) => ({
@@ -103,6 +106,13 @@ export const useSourcesStore = create<SourcesStore>(
         }));
         
         return true;
+      },
+
+      getSourcesByNoteId: (noteId: string) => {
+        if (!noteId) {
+          return [];
+        }
+        return get().sources.filter(source => source.noteId === noteId);
       },
 
     }),

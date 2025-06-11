@@ -4,10 +4,10 @@
 module.exports = {
   // Runtime configuration
   runtime: {
-    port: 5555,
+    port: 5556,
     healthCheck: {
-      endpoint: '/health',
-      method: 'GET',
+      endpoint: "/health",
+      method: "GET",
       interval: 30000,
       timeout: 5000,
     },
@@ -21,17 +21,17 @@ module.exports = {
     instances: 1,
     autorestart: true,
     watch: false,
-    max_memory_restart: '500M',
+    max_memory_restart: "500M",
     env: {
-      NODE_ENV: 'production',
+      NODE_ENV: "production",
     },
   },
 
   // CLI configuration
   cli: {
-    script: './dist/cli.js',
-    command: 'start',
-    args: ['--port', '5555'],
+    script: "./dist/cli.js",
+    command: "start",
+    args: ["--port", "5556"],
   },
 
   // Data schema

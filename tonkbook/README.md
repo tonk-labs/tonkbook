@@ -1,31 +1,66 @@
-# Tonk App
+# TonkBook
 
-Welcome to your new Tonk application!
+TonkBook is a highly-extensible LLM-assisted research platform. Create notes, chat with AI about your sources, and vibe code powerful interfaces over your intelligence.
 
-## Development
+## Prerequisites
+
+Install the Tonk CLI globally:
 
 ```bash
-pnpm install
-pnpm dev
+npm i -g @tonk/cli
 ```
 
-This will start both the frontend development server and the API proxy server.
+## Quick Start
 
-## API Proxy
+1. **Install dependencies:**
+   ```bash
+   cd tonkbook
+   pnpm install
+   ```
 
-The application includes an API proxy server that handles requests to external APIs. In development mode, the proxy server runs locally and forwards requests to the appropriate API endpoints, adding any required authentication.
+2. **Start the main application:**
+   ```bash
+   pnpm dev
+   ```
+   This starts the web interface at `http://localhost:3000`
 
-API services are configured in `src/services/apiServices.ts`. Each service has the following properties:
+3. **Start the AI worker** (required for chat functionality):
+   ```bash
+   cd workers/ai
+   pnpm install
+   pnpm build
+   tonk worker register
+   tonk worker start ai
+   ```
+   The AI worker runs on `http://localhost:5556`
 
-- `prefix`: The route prefix (e.g., "weather")
-- `baseUrl`: The actual API base URL
-- `requiresAuth`: Whether authentication is needed
-- `authType`: Authentication type ("bearer", "apikey", "basic", or "query")
-- `authHeaderName`: Header name for auth (e.g., "Authorization" or "X-API-Key")
-- `authEnvVar`: API key or auth secret
-- `authQueryParamName`: If using query auth type, the corresponding query param
+4. **Start the web scraper worker** (optional, for web search sources):
+   ```bash
+   cd workers/web-scraper  
+   pnpm install
+   pnpm build
+   tonk worker register
+   tonk worker start web-scraper
+   ```
+   The AI worker runs on `http://localhost:5555`
 
-For more information about the API proxy server, see the [services README](./src/services/README.md) and the [server README](./server/README.md).
+## Configuration
+
+### AI Worker Setup
+
+The AI worker requires an OpenAI API key:
+```bash
+cd workers/ai
+pnpm auth
+```
+
+## Architecture
+
+TonkBook uses a modular architecture:
+- **Frontend**: React app with Tailwind CSS
+- **AI Worker**: Handles LLM interactions and document indexing with ChromaDB
+- **Web Scraper**: Extracts content from web searches
+- **Keepsync**: Real-time data synchronization between components
 
 ## Building for Production
 

@@ -8,6 +8,7 @@
   },
   "scripts": {
     "build": "tsc",
+    "auth": "node dist/cli.js setup",
     "start": "node dist/cli.js start",
     "dev": "nodemon --exec ts-node src/cli.ts start",
     "watch": "tsc --watch",
