@@ -54,6 +54,23 @@ cd workers/ai
 pnpm auth
 ```
 
+### Brave Search API Setup
+
+For web search functionality in sources, you'll need a Brave Search API key:
+
+1. Get a Brave Search API key from [Brave Search API](https://brave.com/search/api/)
+2. Set the environment variable:
+   ```bash
+   export BRAVE_SEARCH_API_KEY=your_api_key_here
+   ```
+   
+   Or add it to your `.env` file:
+   ```
+   BRAVE_SEARCH_API_KEY=your_api_key_here
+   ```
+
+TonkBook will use this key to authenticate requests to the Brave Search API.
+
 ## Architecture
 
 TonkBook uses a modular architecture:

@@ -76,7 +76,7 @@ const MainView = () => {
   };
 
   return (
-    <main className="min-h-screen bg-gray-50 p-4 md:p-6 lg:p-8">
+    <main className="p-4 md:p-6 lg:p-8">
       <div className="max-w-6xl mx-auto">
         {/* Error/Info Display */}
         {error.hasError && (
