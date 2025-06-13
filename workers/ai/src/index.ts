@@ -1,4 +1,5 @@
 import * as http from "http";
+import * as path from "path";
 import dotenv from "dotenv";
 import { BaseCredentialsManager } from "./utils/baseCredentialsManager";
 import { LLMService, OpenAIProvider } from "./services/llmProvider";
@@ -36,7 +37,8 @@ interface WorkerConfig {
   chromaPort?: number;
 }
 
-// Initialize credentials manager
+// Initialize credentials manager with absolute path
+const workerRoot = path.resolve(__dirname, "..");
 const credentialsManager = new BaseCredentialsManager(
   [
     {
@@ -55,7 +57,7 @@ const credentialsManager = new BaseCredentialsManager(
       header: "Authorization",
     },
   ],
-  process.cwd(),
+  workerRoot,
 );
 
 // Initialize LLM service
