@@ -48,7 +48,7 @@
     "@automerge/automerge-repo-storage-indexeddb": "^1.2.1",
     "@chroma-core/default-embed": "^0.1.8",
     "@tonk/cli": "^0.2.6",
-    "@tonk/keepsync": "^0.4.3",
+    "@tonk/keepsync": "^0.5.1",
     "@types/papaparse": "^5.3.16",
     "brave-search": "^0.9.0",
     "chromadb": "^3.0.3",

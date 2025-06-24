@@ -27,8 +27,8 @@ importers:
         specifier: ^0.2.6
         version: 0.2.7(@swc/core@1.11.24)(@types/node@22.13.14)(@types/react@19.0.12)(typescript@5.8.2)
       '@tonk/keepsync':
-        specifier: ^0.4.3
-        version: 0.4.8(@swc/core@1.11.24)(@types/node@22.13.14)(react@19.0.0)(rollup@2.79.2)(typescript@5.8.2)(vite@5.4.19(@types/node@22.13.14)(terser@5.39.0))(zustand@5.0.3(@types/react@19.0.12)(react@19.0.0))
+        specifier: ^0.5.1
+        version: 0.5.1(@swc/core@1.11.24)(@types/node@22.13.14)(react@19.0.0)(rollup@2.79.2)(typescript@5.8.2)(vite@5.4.19(@types/node@22.13.14)(terser@5.39.0))(zustand@5.0.3(@types/react@19.0.12)(react@19.0.0))
       '@types/papaparse':
         specifier: ^5.3.16
         version: 5.3.16
@@ -2167,8 +2167,8 @@ packages:
     engines: {node: '>=18'}
     hasBin: true
 
-  '@tonk/keepsync@0.4.8':
-    resolution: {integrity: sha512-CdJRIXn9rz9RoO9svOZuRuS8KApvfLEy1dLxpL8aqPzbP1gFpTNnIBv6pkhgYEVcCEO1oPEPtP/zbSsd9scEew==}
+  '@tonk/keepsync@0.5.1':
+    resolution: {integrity: sha512-FNwmO1sjk1CLoYrhEzmCBORXxsy6VZDN8sPGdPk9NX3STcJljZl7zigP/aJcOZ+wcnr6gAEldtd9gEpOipaSPA==}
     peerDependencies:
       react: ^19.0.0
       zustand: ^5.0.3
@@ -8742,7 +8742,7 @@ snapshots:
       - typescript
       - utf-8-validate
 
-  '@tonk/keepsync@0.4.8(@swc/core@1.11.24)(@types/node@22.13.14)(react@19.0.0)(rollup@2.79.2)(typescript@5.8.2)(vite@5.4.19(@types/node@22.13.14)(terser@5.39.0))(zustand@5.0.3(@types/react@19.0.12)(react@19.0.0))':
+  '@tonk/keepsync@0.5.1(@swc/core@1.11.24)(@types/node@22.13.14)(react@19.0.0)(rollup@2.79.2)(typescript@5.8.2)(vite@5.4.19(@types/node@22.13.14)(terser@5.39.0))(zustand@5.0.3(@types/react@19.0.12)(react@19.0.0))':
     dependencies:
       '@automerge/automerge-repo': 1.2.1(@swc/core@1.11.24)(@types/node@22.13.14)(typescript@5.8.2)
       '@automerge/automerge-repo-network-websocket': 1.2.1(@swc/core@1.11.24)(@types/node@22.13.14)(typescript@5.8.2)

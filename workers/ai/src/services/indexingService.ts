@@ -24,6 +24,20 @@ export class IndexingService {
   private lastIndexingActivity = new Date();
   private totalSourcesFound = 0;
 
+  // Batch progress tracking
+  private totalBatches = 0;
+  private processedBatches = 0;
+  private currentBatchProgress:
+    | {
+        sourceId: string;
+        sourceTitle: string;
+        batchIndex: number;
+        totalChunks: number;
+        processedChunks: number;
+      }
+    | undefined;
+  private batchCalculationComplete = false;
+
   async initialize(): Promise<void> {
     if (this.isInitialized) return;
 
@@ -125,6 +139,71 @@ export class IndexingService {
   }
 
   /**
+   * Pre-calculate total batches across all discovered sources
+   */
+  private async calculateTotalBatches(): Promise<void> {
+    if (this.batchCalculationComplete) return;
+
+    console.log("Indexing Service: Pre-calculating total batches...");
+    let totalChunks = 0;
+    const batchSize = 25; // Same as vector service batch size
+
+    try {
+      const dataPath = "tonkbook/data";
+      const docNode = await ls(dataPath);
+
+      if (docNode && docNode.children) {
+        const docChildren = docNode.children.filter(
+          (child) => child.type === "doc",
+        );
+
+        for (const child of docChildren) {
+          const fullPath = `${dataPath}/${child.name}`;
+          try {
+            const doc = await readDoc<SourceDocument>(fullPath);
+            if (doc && (doc.content || doc.rawCsvContent)) {
+              const sourceType = doc.metadata?.type || "text";
+
+              if (
+                sourceType === "text" ||
+                sourceType === "pdf" ||
+                sourceType === "web"
+              ) {
+                // Calculate chunks for vector sources
+                const chunkCount = vectorService.calculateChunkCount(
+                  doc.content!,
+                );
+                totalChunks += chunkCount;
+                console.log(`Calculated ${chunkCount} chunks for ${fullPath}`);
+              } else if (sourceType === "csv") {
+                // CSV sources are treated as 1 "batch" each
+                totalChunks += 1;
+                console.log(`CSV source ${fullPath} counts as 1 batch`);
+              }
+            }
+          } catch (error) {
+            console.warn(
+              `Failed to read document ${fullPath} for batch calculation:`,
+              error,
+            );
+          }
+        }
+      }
+
+      this.totalBatches = Math.ceil(totalChunks / batchSize);
+      this.batchCalculationComplete = true;
+
+      console.log(
+        `Indexing Service: Pre-calculated ${totalChunks} total chunks = ${this.totalBatches} batches`,
+      );
+    } catch (error) {
+      console.error("Failed to calculate total batches:", error);
+      // Fallback to 0, will calculate dynamically if needed
+      this.totalBatches = 0;
+    }
+  }
+
+  /**
    * Index a source document into the appropriate storage system
    */
   private async indexSource(
@@ -147,12 +226,45 @@ export class IndexingService {
         metadata: { type: sourceType as any, ...doc.metadata },
       };
 
+      // Track the starting batch count for this source
+      const startingBatchCount = this.processedBatches;
+
+      // Create batch progress callback using pre-calculated totals
+      const onBatchProgress = (
+        batchIndex: number,
+        processedChunks: number,
+        totalChunks: number,
+      ) => {
+        this.currentBatchProgress = {
+          sourceId,
+          sourceTitle: title,
+          batchIndex,
+          totalChunks,
+          processedChunks,
+        };
+
+        // Update global processed batch count based on completed batches within this source
+        this.processedBatches = startingBatchCount + batchIndex;
+
+        this.lastIndexingActivity = new Date();
+      };
+
       switch (sourceType) {
         case "text":
         case "pdf":
         case "web":
-          await vectorService.addDocument(source, doc.content!);
+          await vectorService.addDocument(
+            source,
+            doc.content!,
+            onBatchProgress,
+          );
           this.indexedVectorSources.add(sourceId);
+          // Ensure the processed batches count reflects all batches for this source
+          const finalChunkCount = vectorService.calculateChunkCount(
+            doc.content!,
+          );
+          const finalBatchCount = Math.ceil(finalChunkCount / 25);
+          this.processedBatches = startingBatchCount + finalBatchCount;
           break;
         case "csv":
           // For CSV sources, use rawCsvContent instead of content
@@ -160,6 +272,15 @@ export class IndexingService {
           if (csvContent) {
             await csvQueryService.addCSVSource(source, csvContent);
             this.indexedCsvSources.add(sourceId);
+            // CSV sources count as 1 batch, so increment the global counter
+            this.processedBatches += 1;
+            this.currentBatchProgress = {
+              sourceId,
+              sourceTitle: title,
+              batchIndex: 1,
+              totalChunks: 1,
+              processedChunks: 1,
+            };
           } else {
             console.warn(
               `No rawCsvContent or content found for CSV source ${sourceId}`,
@@ -171,8 +292,15 @@ export class IndexingService {
           await vectorService.addDocument(
             { ...source, metadata: { type: "text" as any } },
             doc.content!,
+            onBatchProgress,
           );
           this.indexedVectorSources.add(sourceId);
+          // Ensure the processed batches count reflects all batches for this source
+          const defaultFinalChunkCount = vectorService.calculateChunkCount(
+            doc.content!,
+          );
+          const defaultFinalBatchCount = Math.ceil(defaultFinalChunkCount / 25);
+          this.processedBatches = startingBatchCount + defaultFinalBatchCount;
           break;
       }
 
@@ -227,6 +355,9 @@ export class IndexingService {
             `Found ${docChildren.length} source documents in ${dataPath}`,
           );
 
+          // Pre-calculate total batches before starting indexing
+          await this.calculateTotalBatches();
+
           for (const child of docChildren) {
             const fullPath = `${dataPath}/${child.name}`;
             if (!this.watchedPaths.has(fullPath)) {
@@ -252,7 +383,7 @@ export class IndexingService {
   }
 
   /**
-   * Get indexing statistics
+   * Get indexing statistics with batch-level progress
    */
   async getStats(): Promise<{
     vectorSources: { count: number };
@@ -263,6 +394,18 @@ export class IndexingService {
       totalDiscovered: number;
       isIndexing: boolean;
       lastActivity: string;
+      batches: {
+        totalBatches: number;
+        processedBatches: number;
+        pendingBatches: number;
+        currentBatchProgress?: {
+          sourceId: string;
+          sourceTitle: string;
+          batchIndex: number;
+          totalChunks: number;
+          processedChunks: number;
+        };
+      };
     };
   }> {
     // Get CSV sources from the service to stay consistent
@@ -280,6 +423,12 @@ export class IndexingService {
       pendingCount > 0 ||
       Date.now() - this.lastIndexingActivity.getTime() < 10000;
 
+    // Calculate batch statistics
+    const pendingBatches = Math.max(
+      0,
+      this.totalBatches - this.processedBatches,
+    );
+
     return {
       vectorSources: { count: vectorSourceCount },
       csvSources: {
@@ -292,6 +441,12 @@ export class IndexingService {
         totalDiscovered,
         isIndexing,
         lastActivity: this.lastIndexingActivity.toISOString(),
+        batches: {
+          totalBatches: this.totalBatches,
+          processedBatches: this.processedBatches,
+          pendingBatches,
+          currentBatchProgress: this.currentBatchProgress,
+        },
       },
     };
   }

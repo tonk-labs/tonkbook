@@ -9,6 +9,19 @@ export interface IndexingStats {
     totalDiscovered: number;
     isIndexing: boolean;
     lastActivity: string;
+    // Batch-level progress tracking
+    batches: {
+      totalBatches: number;
+      processedBatches: number;
+      pendingBatches: number;
+      currentBatchProgress?: {
+        sourceId: string;
+        sourceTitle: string;
+        batchIndex: number;
+        totalChunks: number;
+        processedChunks: number;
+      };
+    };
   };
 }
 

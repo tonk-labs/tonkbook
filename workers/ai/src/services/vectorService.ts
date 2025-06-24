@@ -57,9 +57,48 @@ export class VectorService {
   }
 
   /**
+   * Calculate the number of chunks a document would be split into without actually processing it
+   */
+  calculateChunkCount(content: string): number {
+    const maxChunkSize = 800; // characters
+    const overlap = 150; // character overlap between chunks
+
+    let startIndex = 0;
+    let chunkCount = 0;
+
+    while (startIndex < content.length) {
+      const endIndex = Math.min(startIndex + maxChunkSize, content.length);
+      const chunkContent = content.slice(startIndex, endIndex);
+
+      // Try to break at sentence boundaries (same logic as chunkDocument)
+      let actualEndIndex = endIndex;
+      if (endIndex < content.length) {
+        const lastSentenceEnd = chunkContent.lastIndexOf(". ");
+        if (lastSentenceEnd > maxChunkSize * 0.7) {
+          actualEndIndex = startIndex + lastSentenceEnd + 1;
+        }
+      }
+
+      const finalContent = content.slice(startIndex, actualEndIndex).trim();
+      if (finalContent.length > 0) {
+        chunkCount++;
+      }
+
+      startIndex = Math.max(actualEndIndex - overlap, startIndex + 1);
+      if (startIndex >= actualEndIndex) break;
+    }
+
+    return chunkCount;
+  }
+
+  /**
    * Add a source document to the vector database
    */
-  async addDocument(source: SourceDocument, content: string): Promise<void> {
+  async addDocument(
+    source: SourceDocument, 
+    content: string,
+    onBatchProgress?: (batchIndex: number, totalBatches: number, processedChunks: number, totalChunks: number) => void
+  ): Promise<void> {
     console.log(`Vector Service: Adding document for source ${source.id}`);
     await this.initialize();
 
@@ -83,15 +122,23 @@ export class VectorService {
 
     // Add chunks in smaller batches to avoid overwhelming Chroma
     const batchSize = 25;
+    const totalBatches = Math.ceil(chunks.length / batchSize);
+    
     for (let i = 0; i < chunks.length; i += batchSize) {
       const batchEnd = Math.min(i + batchSize, chunks.length);
       const batchIds = ids.slice(i, batchEnd);
       const batchDocuments = documents.slice(i, batchEnd);
       const batchMetadatas = metadatas.slice(i, batchEnd);
+      const batchIndex = Math.floor(i / batchSize) + 1;
 
       console.log(
-        `Vector Service: Adding batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(chunks.length / batchSize)} (${batchIds.length} chunks)`,
+        `Vector Service: Adding batch ${batchIndex}/${totalBatches} (${batchIds.length} chunks)`,
       );
+
+      // Report progress before processing batch
+      if (onBatchProgress) {
+        onBatchProgress(batchIndex - 1, totalBatches, i, chunks.length);
+      }
 
       try {
         await this.collection.add({
@@ -100,8 +147,13 @@ export class VectorService {
           metadatas: batchMetadatas,
         });
         console.log(
-          `Vector Service: Successfully added batch ${Math.floor(i / batchSize) + 1}`,
+          `Vector Service: Successfully added batch ${batchIndex}`,
         );
+
+        // Report progress after processing batch
+        if (onBatchProgress) {
+          onBatchProgress(batchIndex, totalBatches, batchEnd, chunks.length);
+        }
 
         // Small delay between batches
         if (i + batchSize < chunks.length) {
@@ -109,7 +161,7 @@ export class VectorService {
         }
       } catch (error) {
         console.error(
-          `Vector Service: Failed to add batch ${Math.floor(i / batchSize) + 1}:`,
+          `Vector Service: Failed to add batch ${batchIndex}:`,
           error,
         );
         throw error;

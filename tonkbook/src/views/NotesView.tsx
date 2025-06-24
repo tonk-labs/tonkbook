@@ -351,7 +351,7 @@ const NotesView = () => {
     }
   };
 
-  // Render indexing status indicator
+  // Render indexing status indicator with progress bar
   const renderIndexingStatus = () => {
     if (indexingLoading) {
       return (
@@ -378,19 +378,64 @@ const NotesView = () => {
       const { progress } = indexingStatus.stats;
       const isHealthy = indexingStatus.isInitialized;
       const isIndexing = progress.isIndexing;
+      const batches = progress.batches || {
+        totalBatches: 0,
+        processedBatches: 0,
+        pendingBatches: 0,
+      };
 
-      if (isIndexing && progress.pendingCount > 0) {
-        // Show progress when actively indexing
+      // Calculate progress percentage based on batches for more granular progress
+      const batchProgressPercentage =
+        batches.totalBatches > 0
+          ? Math.round((batches.processedBatches / batches.totalBatches) * 100)
+          : 0;
+
+      // Calculate source-level progress as fallback
+      const sourceProgressPercentage =
+        progress.totalDiscovered > 0
+          ? Math.round((progress.indexedCount / progress.totalDiscovered) * 100)
+          : 0;
+
+      if (
+        isIndexing &&
+        (progress.pendingCount > 0 || batches.pendingBatches > 0)
+      ) {
+        // Show detailed batch progress when actively indexing
+        const currentBatch = batches.currentBatchProgress;
+        const displayPercentage =
+          batches.totalBatches > 0
+            ? batchProgressPercentage
+            : sourceProgressPercentage;
+
         return (
-          <div className="flex items-center gap-2 text-sm">
-            <div className="flex items-center gap-1">
-              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-500"></div>
-              <DatabaseIcon size={14} className="text-blue-600" />
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 text-sm">
+              <div className="flex items-center gap-1">
+                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-500"></div>
+                <DatabaseIcon size={14} className="text-blue-600" />
+              </div>
+              <span className="text-blue-700">
+                {`Indexing ${progress.indexedCount}/${progress.totalDiscovered} sources (${displayPercentage}%)`}
+              </span>
             </div>
-            <span className="text-blue-700">
-              Indexing {progress.indexedCount}/{progress.totalDiscovered}{" "}
-              sources
-            </span>
+
+            {/* Current batch details */}
+            {currentBatch && (
+              <div className="text-xs text-gray-600">
+                {currentBatch.sourceTitle}: {currentBatch.processedChunks}/
+                {currentBatch.totalChunks} chunks
+              </div>
+            )}
+
+            {/* Progress Bar */}
+            <div className="w-full">
+              <div className="bg-gray-200 rounded-full h-1.5 overflow-hidden">
+                <div
+                  className="bg-blue-500 h-full rounded-full transition-all duration-300 ease-out"
+                  style={{ width: `${displayPercentage}%` }}
+                ></div>
+              </div>
+            </div>
           </div>
         );
       }
@@ -410,7 +455,7 @@ const NotesView = () => {
             />
           </div>
           <span className={isHealthy ? "text-green-700" : "text-yellow-700"}>
-            {progress.indexedCount} sources indexed
+            {progress.indexedCount} sources indexed (100%)
           </span>
         </div>
       );
