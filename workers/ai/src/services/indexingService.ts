@@ -37,6 +37,9 @@ export class IndexingService {
       }
     | undefined;
   private batchCalculationComplete = false;
+  
+  // Content hash tracking for change detection
+  private sourceContentHashes = new Map<string, string>();
 
   async initialize(): Promise<void> {
     if (this.isInitialized) return;
@@ -59,17 +62,58 @@ export class IndexingService {
    */
   private async initializeTrackedSources(): Promise<void> {
     try {
+      // Get existing vector sources from ChromaDB
+      const existingVectorSources = await vectorService.getExistingSources();
+      existingVectorSources.forEach((sourceId) => {
+        this.indexedVectorSources.add(sourceId);
+      });
+
       // Get existing CSV sources and add them to our tracking
       const existingCsvSources = csvQueryService.getAllSources();
       existingCsvSources.forEach((sourceId) => {
         this.indexedCsvSources.add(sourceId);
       });
 
+      // Initialize content hashes for existing sources by reading current documents
+      await this.initializeContentHashes();
+
       console.log(
-        `Indexing Service: Initialized tracking for ${existingCsvSources.length} existing CSV sources`,
+        `Indexing Service: Initialized tracking for ${existingVectorSources.size} vector sources and ${existingCsvSources.length} CSV sources`,
       );
     } catch (error) {
       console.warn("Failed to initialize tracked sources:", error);
+    }
+  }
+
+  /**
+   * Initialize content hashes for existing sources
+   */
+  private async initializeContentHashes(): Promise<void> {
+    try {
+      const dataPath = "tonkbook/data";
+      const docNode = await ls(dataPath);
+
+      if (docNode && docNode.children) {
+        const docChildren = docNode.children.filter((child) => child.type === "doc");
+        
+        for (const child of docChildren) {
+          const fullPath = `${dataPath}/${child.name}`;
+          try {
+            const doc = await readDoc<SourceDocument>(fullPath);
+            if (doc && (doc.content || doc.rawCsvContent)) {
+              const sourceId = doc.id || fullPath.replace(/\//g, "_");
+              const content = doc.content || doc.rawCsvContent || "";
+              
+              // Calculate and store initial hash (this will also handle the "first time" case)
+              this.hasContentChanged(sourceId, content);
+            }
+          } catch (error) {
+            console.warn(`Failed to read document ${fullPath} for hash initialization:`, error);
+          }
+        }
+      }
+    } catch (error) {
+      console.warn("Failed to initialize content hashes:", error);
     }
   }
 
@@ -88,10 +132,18 @@ export class IndexingService {
         async (payload: any) => {
           const doc = payload.doc;
           if (doc && (doc.content || doc.rawCsvContent)) {
-            console.log(`Source document changed: ${documentPath}`);
-            this.pendingIndexing.add(documentPath);
-            this.lastIndexingActivity = new Date();
-            await this.indexSource(doc, documentPath);
+            const sourceId = doc.id || documentPath.replace(/\//g, "_");
+            const content = doc.content || doc.rawCsvContent || "";
+            
+            // Only re-index if content has actually changed
+            if (this.hasContentChanged(sourceId, content)) {
+              console.log(`Source document content changed: ${documentPath}`);
+              this.pendingIndexing.add(documentPath);
+              this.lastIndexingActivity = new Date();
+              await this.indexSource(doc, documentPath);
+            } else {
+              console.log(`Source document updated but content unchanged: ${documentPath}`);
+            }
           }
         },
       );
@@ -110,14 +162,22 @@ export class IndexingService {
           (sourceType === "csv" && this.indexedCsvSources.has(sourceId)) ||
           (sourceType !== "csv" && this.indexedVectorSources.has(sourceId));
 
-        if (!isAlreadyTracked) {
-          console.log(`Indexing existing document: ${documentPath}`);
+        // Check if content has changed (even for tracked sources)
+        const content = currentDoc.content || currentDoc.rawCsvContent || "";
+        const contentHasChanged = this.hasContentChanged(sourceId, content);
+
+        if (!isAlreadyTracked || contentHasChanged) {
+          if (isAlreadyTracked && contentHasChanged) {
+            console.log(`Content changed for ${documentPath}, re-indexing...`);
+          } else {
+            console.log(`Indexing new document: ${documentPath}`);
+          }
           this.pendingIndexing.add(documentPath);
           this.lastIndexingActivity = new Date();
           await this.indexSource(currentDoc, documentPath);
         } else {
           console.log(
-            `Document already tracked: ${documentPath} (${sourceId})`,
+            `Document already indexed and unchanged: ${documentPath} (${sourceId})`,
           );
         }
       }
@@ -136,6 +196,42 @@ export class IndexingService {
       this.listeners.delete(documentPath);
       console.log(`Indexing Service: Stopped watching ${documentPath}`);
     }
+  }
+
+  /**
+   * Calculate a simple hash of content for change detection
+   */
+  private calculateContentHash(content: string): string {
+    let hash = 0;
+    for (let i = 0; i < content.length; i++) {
+      const char = content.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32-bit integer
+    }
+    return hash.toString();
+  }
+
+  /**
+   * Check if source content has changed since last indexing
+   */
+  private hasContentChanged(sourceId: string, content: string): boolean {
+    const currentHash = this.calculateContentHash(content);
+    const previousHash = this.sourceContentHashes.get(sourceId);
+    
+    if (!previousHash) {
+      // No previous hash, content is "new"
+      this.sourceContentHashes.set(sourceId, currentHash);
+      return true;
+    }
+    
+    if (currentHash !== previousHash) {
+      // Content has changed, update hash
+      this.sourceContentHashes.set(sourceId, currentHash);
+      return true;
+    }
+    
+    // Content unchanged
+    return false;
   }
 
   /**

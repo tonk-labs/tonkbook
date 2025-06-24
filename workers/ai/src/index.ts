@@ -83,6 +83,8 @@ export async function startWorker(config: WorkerConfig): Promise<http.Server> {
     storage: new NodeFSStorageAdapter(),
   });
 
+  await engine.whenReady();
+
   // Initialize Chroma server manager
   chromaManager = new ChromaServerManager(chromaPort);
 
@@ -284,21 +286,30 @@ export async function startWorker(config: WorkerConfig): Promise<http.Server> {
         if (req.method === "GET" && req.url === "/api/indexing/status") {
           try {
             const stats = await indexingService.getStats();
-            const watchedPaths = Array.from((indexingService as any).watchedPaths || []);
-            
+            const watchedPaths = Array.from(
+              (indexingService as any).watchedPaths || [],
+            );
+
             res.writeHead(200, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({
-              stats,
-              watchedPaths,
-              isInitialized: (indexingService as any).isInitialized || false,
-              timestamp: new Date().toISOString()
-            }));
+            res.end(
+              JSON.stringify({
+                stats,
+                watchedPaths,
+                isInitialized: (indexingService as any).isInitialized || false,
+                timestamp: new Date().toISOString(),
+              }),
+            );
           } catch (error) {
             console.error("Indexing status error:", error);
             res.writeHead(500, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({
-              error: error instanceof Error ? error.message : "Failed to get indexing status"
-            }));
+            res.end(
+              JSON.stringify({
+                error:
+                  error instanceof Error
+                    ? error.message
+                    : "Failed to get indexing status",
+              }),
+            );
           }
           return;
         }

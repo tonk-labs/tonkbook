@@ -92,12 +92,49 @@ export class VectorService {
   }
 
   /**
+   * Get all source IDs that are currently indexed in the vector database
+   */
+  async getExistingSources(): Promise<Set<string>> {
+    await this.initialize();
+
+    try {
+      // Get all documents and extract unique source IDs
+      const results = await this.collection.get({
+        include: ["metadatas"],
+      });
+
+      const sourceIds = new Set<string>();
+
+      if (results.metadatas) {
+        for (const metadata of results.metadatas) {
+          if (metadata && metadata.sourceId) {
+            sourceIds.add(metadata.sourceId);
+          }
+        }
+      }
+
+      console.log(
+        `Vector Service: Found ${sourceIds.size} existing sources in ChromaDB`,
+      );
+      return sourceIds;
+    } catch (error) {
+      console.error("Failed to get existing sources from ChromaDB:", error);
+      return new Set();
+    }
+  }
+
+  /**
    * Add a source document to the vector database
    */
   async addDocument(
-    source: SourceDocument, 
+    source: SourceDocument,
     content: string,
-    onBatchProgress?: (batchIndex: number, totalBatches: number, processedChunks: number, totalChunks: number) => void
+    onBatchProgress?: (
+      batchIndex: number,
+      totalBatches: number,
+      processedChunks: number,
+      totalChunks: number,
+    ) => void,
   ): Promise<void> {
     console.log(`Vector Service: Adding document for source ${source.id}`);
     await this.initialize();
@@ -123,7 +160,7 @@ export class VectorService {
     // Add chunks in smaller batches to avoid overwhelming Chroma
     const batchSize = 25;
     const totalBatches = Math.ceil(chunks.length / batchSize);
-    
+
     for (let i = 0; i < chunks.length; i += batchSize) {
       const batchEnd = Math.min(i + batchSize, chunks.length);
       const batchIds = ids.slice(i, batchEnd);
@@ -146,9 +183,7 @@ export class VectorService {
           documents: batchDocuments,
           metadatas: batchMetadatas,
         });
-        console.log(
-          `Vector Service: Successfully added batch ${batchIndex}`,
-        );
+        console.log(`Vector Service: Successfully added batch ${batchIndex}`);
 
         // Report progress after processing batch
         if (onBatchProgress) {
