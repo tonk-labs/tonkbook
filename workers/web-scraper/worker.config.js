@@ -6,8 +6,8 @@ module.exports = {
   runtime: {
     port: 5555,
     healthCheck: {
-      endpoint: '/health',
-      method: 'GET',
+      endpoint: "/health",
+      method: "GET",
       interval: 30000,
       timeout: 5000,
     },
@@ -21,17 +21,17 @@ module.exports = {
     instances: 1,
     autorestart: true,
     watch: false,
-    max_memory_restart: '500M',
+    max_memory_restart: "1.5G",
     env: {
-      NODE_ENV: 'production',
+      NODE_ENV: "production",
     },
   },
 
   // CLI configuration
   cli: {
-    script: './dist/cli.js',
-    command: 'start',
-    args: ['--port', '5555'],
+    script: "./dist/cli.js",
+    command: "start",
+    args: ["--port", "5555"],
   },
 
   // Data schema
@@ -44,7 +44,7 @@ module.exports = {
       default: {},
 
       // Scraped content schema
-      'scraped-content': {
+      "scraped-content": {
         type: "object",
         properties: {
           type: { type: "string", const: "scraped-content" },
@@ -63,13 +63,21 @@ module.exports = {
               canonical: { type: "string", format: "uri" },
               language: { type: "string" },
               wordCount: { type: "number", minimum: 0 },
-              characterCount: { type: "number", minimum: 0 }
+              characterCount: { type: "number", minimum: 0 },
             },
-            required: ["wordCount", "characterCount"]
-          }
+            required: ["wordCount", "characterCount"],
+          },
         },
-        required: ["type", "url", "title", "content", "markdown", "scrapedAt", "metadata"]
-      }
+        required: [
+          "type",
+          "url",
+          "title",
+          "content",
+          "markdown",
+          "scrapedAt",
+          "metadata",
+        ],
+      },
     },
   },
 
