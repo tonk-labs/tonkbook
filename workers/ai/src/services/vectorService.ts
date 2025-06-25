@@ -142,56 +142,63 @@ export class VectorService {
     // Remove existing chunks for this source first
     await this.removeDocument(source.id);
 
-    const chunks = this.chunkDocument(content, source);
+    // Calculate total chunks
+    const totalChunks = this.calculateChunkCount(content);
     console.log(
-      `Vector Service: Created ${chunks.length} chunks for source ${source.id}`,
+      `Vector Service: Will create ${totalChunks} chunks for source ${source.id}`,
     );
 
-    if (chunks.length === 0) return;
+    if (totalChunks === 0) return;
 
-    const ids = chunks.map((chunk) => chunk.id);
-    const documents = chunks.map((chunk) => chunk.content);
-    const metadatas = chunks.map((chunk) => chunk.metadata);
-
-    console.log(
-      `Vector Service: Adding ${chunks.length} chunks to Chroma collection`,
-    );
-
-    // Add chunks in smaller batches to avoid overwhelming Chroma
+    // Stream chunks and process immediately
     const batchSize = 25;
-    const totalBatches = Math.ceil(chunks.length / batchSize);
+    const totalBatches = Math.ceil(totalChunks / batchSize);
+    let processedChunks = 0;
+    let batchIndex = 0;
 
-    for (let i = 0; i < chunks.length; i += batchSize) {
-      const batchEnd = Math.min(i + batchSize, chunks.length);
-      const batchIds = ids.slice(i, batchEnd);
-      const batchDocuments = documents.slice(i, batchEnd);
-      const batchMetadatas = metadatas.slice(i, batchEnd);
-      const batchIndex = Math.floor(i / batchSize) + 1;
+    for await (const chunkBatch of this.streamChunksInBatches(
+      content,
+      source,
+      batchSize,
+    )) {
+      batchIndex++;
 
       console.log(
-        `Vector Service: Adding batch ${batchIndex}/${totalBatches} (${batchIds.length} chunks)`,
+        `Vector Service: Adding batch ${batchIndex}/${totalBatches} (${chunkBatch.length} chunks)`,
       );
 
       // Report progress before processing batch
       if (onBatchProgress) {
-        onBatchProgress(batchIndex - 1, totalBatches, i, chunks.length);
+        onBatchProgress(
+          batchIndex - 1,
+          totalBatches,
+          processedChunks,
+          totalChunks,
+        );
       }
 
       try {
         await this.collection.add({
-          ids: batchIds,
-          documents: batchDocuments,
-          metadatas: batchMetadatas,
+          ids: chunkBatch.map((chunk) => chunk.id),
+          documents: chunkBatch.map((chunk) => chunk.content),
+          metadatas: chunkBatch.map((chunk) => chunk.metadata),
         });
+
+        processedChunks += chunkBatch.length;
         console.log(`Vector Service: Successfully added batch ${batchIndex}`);
 
         // Report progress after processing batch
         if (onBatchProgress) {
-          onBatchProgress(batchIndex, totalBatches, batchEnd, chunks.length);
+          onBatchProgress(
+            batchIndex,
+            totalBatches,
+            processedChunks,
+            totalChunks,
+          );
         }
 
-        // Small delay between batches
-        if (i + batchSize < chunks.length) {
+        // Small delay between batches to allow garbage collection
+        if (batchIndex < totalBatches) {
           await new Promise((resolve) => setTimeout(resolve, 100));
         }
       } catch (error) {
@@ -204,7 +211,7 @@ export class VectorService {
     }
 
     console.log(
-      `Vector Service: Successfully added all ${chunks.length} chunks for source ${source.id}`,
+      `Vector Service: Successfully added all ${processedChunks} chunks for source ${source.id}`,
     );
   }
 
@@ -255,18 +262,19 @@ export class VectorService {
   }
 
   /**
-   * Split document content into manageable chunks
+   * Stream document chunks in batches
    */
-  private chunkDocument(
+  private async *streamChunksInBatches(
     content: string,
     source: SourceDocument,
-  ): DocumentChunk[] {
-    const maxChunkSize = 800; // characters
-    const overlap = 150; // character overlap between chunks
+    batchSize: number = 25,
+  ): AsyncGenerator<DocumentChunk[], void, unknown> {
+    const maxChunkSize = 800;
+    const overlap = 150;
 
-    const chunks: DocumentChunk[] = [];
     let startIndex = 0;
     let chunkIndex = 0;
+    let currentBatch: DocumentChunk[] = [];
 
     while (startIndex < content.length) {
       const endIndex = Math.min(startIndex + maxChunkSize, content.length);
@@ -277,7 +285,6 @@ export class VectorService {
       if (endIndex < content.length) {
         const lastSentenceEnd = chunkContent.lastIndexOf(". ");
         if (lastSentenceEnd > maxChunkSize * 0.7) {
-          // Only if we don't lose too much content
           actualEndIndex = startIndex + lastSentenceEnd + 1;
         }
       }
@@ -285,7 +292,7 @@ export class VectorService {
       const finalContent = content.slice(startIndex, actualEndIndex).trim();
 
       if (finalContent.length > 0) {
-        chunks.push({
+        currentBatch.push({
           id: `${source.id}_chunk_${chunkIndex}`,
           content: finalContent,
           metadata: {
@@ -296,14 +303,22 @@ export class VectorService {
           },
         });
         chunkIndex++;
+
+        // Yield batch when full
+        if (currentBatch.length >= batchSize) {
+          yield currentBatch;
+          currentBatch = []; // Clear for next batch
+        }
       }
 
       startIndex = Math.max(actualEndIndex - overlap, startIndex + 1);
-
       if (startIndex >= actualEndIndex) break;
     }
 
-    return chunks;
+    // Yield remaining chunks if any
+    if (currentBatch.length > 0) {
+      yield currentBatch;
+    }
   }
 
   /**
