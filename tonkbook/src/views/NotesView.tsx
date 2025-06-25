@@ -17,6 +17,7 @@ import {
   DatabaseIcon,
   AlertCircleIcon,
   CheckCircleIcon,
+  SettingsIcon,
 } from "lucide-react";
 import { useIndexingStatus } from "../hooks/useIndexingStatus";
 import { Source, ChatMessage } from "../types/source";
@@ -27,6 +28,8 @@ import WebSearchModal from "../components/sources/WebSearchModal";
 import SourceCard from "../components/sources/SourceCard";
 import AddSourceButtons from "../components/sources/AddSourceButtons";
 import ViewSourceModal from "../components/sources/ViewSourceModal";
+import SystemPromptModal from "../components/SystemPromptModal";
+import { systemPromptService } from "../services/systemPromptService";
 
 const NotesView = () => {
   const { noteId } = useParams<{ noteId: string }>();
@@ -58,6 +61,10 @@ const NotesView = () => {
   const [showWebSearchModal, setShowWebSearchModal] = useState(false);
   const [showViewSourceModal, setShowViewSourceModal] = useState(false);
   const [selectedSource, setSelectedSource] = useState<Source | null>(null);
+  const [showSystemPromptModal, setShowSystemPromptModal] = useState(false);
+  const [currentSystemPrompt, setCurrentSystemPrompt] = useState(() => 
+    systemPromptService.getSystemPrompt()
+  );
 
   // Chat state
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -243,6 +250,13 @@ const NotesView = () => {
   const handleCloseViewSource = () => {
     setShowViewSourceModal(false);
     setSelectedSource(null);
+  };
+
+  // Handle saving system prompt
+  const handleSaveSystemPrompt = (prompt: string) => {
+    systemPromptService.setSystemPrompt(prompt);
+    setCurrentSystemPrompt(prompt);
+    setShowSystemPromptModal(false);
   };
 
   // Handle saving chat as AI source
@@ -607,6 +621,14 @@ const NotesView = () => {
               <h2 className="text-lg font-semibold text-gray-900">Chat</h2>
               <div className="flex items-center gap-2">
                 <button
+                  onClick={() => setShowSystemPromptModal(true)}
+                  className="px-3 py-1 text-sm bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors flex items-center gap-2"
+                  title="Configure system prompt"
+                >
+                  <SettingsIcon size={16} />
+                  System Prompt
+                </button>
+                <button
                   onClick={handleSaveChatAsSource}
                   disabled={messages.length <= 1}
                   className="px-3 py-1 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
@@ -740,6 +762,13 @@ const NotesView = () => {
         onClose={handleCloseViewSource}
         source={selectedSource}
         onUpdateSource={updateSource}
+      />
+
+      <SystemPromptModal
+        isOpen={showSystemPromptModal}
+        onClose={() => setShowSystemPromptModal(false)}
+        currentPrompt={currentSystemPrompt}
+        onSave={handleSaveSystemPrompt}
       />
     </div>
   );

@@ -1,5 +1,6 @@
 import { vectorService } from "./vectorService";
 import { csvQueryService } from "./csvQueryService";
+import { systemPromptService } from "./systemPromptService";
 import { Source } from "../types/source";
 
 interface RAGResult {
@@ -204,26 +205,18 @@ export class RAGService {
     ragResult: RAGResult,
     noteContext?: string,
   ): string {
-    let prompt = `You are a knowledgeable research assistant with access to relevant information from various sources. Your role is to provide thoughtful, analytical, and comprehensive responses that synthesize information across sources.
+    // Get the base system prompt (custom or default)
+    let prompt = systemPromptService.getSystemPrompt();
 
-AVAILABLE CONTEXT:
+    // Add available context
+    prompt += `\n\nAVAILABLE CONTEXT:
 ${ragResult.combinedContext}`;
 
+    // Add note context if provided
     if (noteContext) {
       prompt += `\n\nCURRENT NOTE CONTEXT:
 ${noteContext}`;
     }
-
-    prompt += `\n\nResponse Guidelines:
-- Provide analytical, long-form responses that explore the topic in depth
-- Synthesize information across multiple sources when possible
-- Always cite your sources using format like "(Source: [Title])" when referencing specific information
-- Include concrete details, data points, and examples from the sources
-- Offer nuanced perspectives and consider multiple viewpoints
-- Draw connections between different pieces of information
-- If information is limited or missing, acknowledge this while still providing what insights you can
-- Structure responses with clear reasoning and logical flow
-- Aim for substantive, thoughtful analysis rather than brief answers`;
 
     return prompt;
   }
